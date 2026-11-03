@@ -17,7 +17,7 @@
       <div class="aside-note">
         PROTOCOL EXPLORER<br /><span>OAuth 2.0 · Session · JWT</span>
       </div>
-      <div class="connection"><span class="dot"></span> 本機隔離執行器</div>
+      <div class="connection"><span class="dot"></span> 環境測試執行器</div>
     </aside>
     <main>
       <header>
@@ -26,19 +26,26 @@
           <h1>OAuth 安全測試台<span class="cursor">_</span></h1>
           <p>用可追溯的證據，驗證每一道安全邊界。</p>
         </div>
-        <span class="mode">● SIMULATION</span>
+        <span id="environment-mode" class="mode">● SIMULATION</span>
       </header>
       <section class="target-bar">
         <div>
-          <span class="label">TARGET ENVIRONMENT</span
-          ><strong
-            >隔離協定模擬器
-            <span class="muted">/ loopback fixture</span></strong
+          <label class="label" for="environment-select"
+            >TARGET ENVIRONMENT</label
           >
+          <select
+            id="environment-select"
+            disabled
+            aria-label="目前測試環境"
+          ></select>
+          <span id="environment-target" class="muted">隔離協定模擬器</span>
         </div>
-        <span class="tag">無正式服務連線</span>
+        <div class="environment-actions">
+          <button id="environment-new" disabled>＋ 新增環境</button
+          ><button id="environment-edit" disabled>管理</button>
+        </div>
       </section>
-      <div class="notice">
+      <div id="environment-notice" class="notice">
         ⓘ 此處測量的是本機 fixture。通過結果不代表 auth-service
         正式環境安全；Google 登入、D1 與瀏覽器 CORS 尚未驗證。
       </div>
@@ -70,6 +77,7 @@
               <option>Session</option>
               <option>JWT</option>
               <option>Browser</option>
+              <option>Service</option>
             </select>
           </div>
           <div id="catalog"></div>
@@ -109,5 +117,74 @@
         </div>
       </footer>
     </main>
+    <dialog id="environment-dialog" aria-labelledby="environment-dialog-title">
+      <form id="environment-form">
+        <div class="panel-heading">
+          <h2 id="environment-dialog-title">新增環境</h2>
+          <button type="button" id="environment-close" aria-label="關閉">
+            ✕
+          </button>
+        </div>
+        <div class="environment-fields">
+          <label
+            >環境名稱<input
+              id="profile-name"
+              maxlength="80"
+              required
+              placeholder="例如：開發機、QA、個人沙盒"
+          /></label>
+          <label
+            >類型<select id="profile-type">
+              <option value="http">HTTP 服務</option>
+              <option value="simulation">隔離模擬器</option>
+            </select></label
+          >
+          <div id="http-profile-fields">
+            <label
+              >服務基底網址<input
+                id="profile-url"
+                type="url"
+                placeholder="http://localhost:8787"
+                maxlength="2048"
+            /></label>
+            <p class="muted">
+              僅填寫你有權測試的服務。網址不含帳密、路徑或
+              query；儲存不會立即連線。
+            </p>
+            <label
+              >已登記的 client ID（選填）<input
+                id="profile-client"
+                maxlength="200"
+            /></label>
+            <label
+              >已登記的 Origin（選填）<input
+                id="profile-origin"
+                type="url"
+                placeholder="https://app.example.test"
+                maxlength="2048"
+            /></label>
+            <label
+              >已登記的 redirect URI（選填）<input
+                id="profile-redirect"
+                type="url"
+                placeholder="https://app.example.test/callback"
+                maxlength="2048"
+            /></label>
+            <p class="muted">
+              未設定的前置條件會標為待確認。此設定不保存 cookie、token 或
+              secret。
+            </p>
+          </div>
+          <p id="environment-error" class="FAIL" role="alert"></p>
+          <div class="environment-form-actions">
+            <button id="environment-delete" type="button" hidden>
+              刪除此環境</button
+            ><button id="environment-save" class="primary" type="submit">
+              儲存並切換
+            </button>
+          </div>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

@@ -11,12 +11,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dashboardServer } from "../src/server.js";
 import { catalog } from "../src/runner.js";
+import { createFixture } from "../src/fixture.js";
 const scenarioCount = catalog.length;
 const passCount = scenarioCount - 1;
-const server = dashboardServer();
+const work = await mkdtemp(join(tmpdir(), "oauth-ui-"));
+const server = dashboardServer({
+  environmentsFile: join(work, "environments.json"),
+});
+const httpTarget = await createFixture();
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
-const work = await mkdtemp(join(tmpdir(), "oauth-ui-"));
 const profile = join(work, "profile");
 const downloads = join(work, "downloads");
 await mkdir(profile);
@@ -209,6 +213,108 @@ try {
   );
   if ((await evaluate("document.getElementById('total').textContent")) !== "0")
     throw Error("Unexpected persistence");
+  // Save a local result, then verify custom environment results cannot replace it.
+  await evaluate(
+    "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
+  );
+  await wait(
+    "document.getElementById('total').textContent==='1' && !document.getElementById('run').disabled",
+  );
+  await evaluate("document.getElementById('environment-new').click()");
+  await evaluate(
+    `document.getElementById('profile-name').value='My QA target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('environment-form').requestSubmit()`,
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP')",
+  );
+  if ((await evaluate("document.getElementById('total').textContent")) !== "0")
+    throw Error("Mixed environment results");
+  const customId = await evaluate(
+    "document.getElementById('environment-select').value",
+  );
+  await evaluate(
+    "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
+  );
+  await wait(
+    "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
+  );
+  await evaluate(
+    "document.getElementById('environment-select').value='local';document.getElementById('environment-select').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('environment-select').disabled`,
+  );
+  if ((await evaluate("document.getElementById('total').textContent")) !== "1")
+    throw Error("Local result not retained");
+  await evaluate(
+    `document.getElementById('environment-select').value=${JSON.stringify(customId)};document.getElementById('environment-select').dispatchEvent(new Event('change'))`,
+  );
+  await wait(
+    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+  );
+  if ((await evaluate("document.getElementById('pass').textContent")) !== "1")
+    throw Error("Custom result not retained");
+  await evaluate(
+    "document.getElementById('environment-edit').click();document.getElementById('profile-name').value='Renamed QA';document.getElementById('environment-form').requestSubmit()",
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('status').textContent.includes('Renamed QA')",
+  );
+  if ((await evaluate("document.getElementById('total').textContent")) !== "0")
+    throw Error("Stale configuration results retained");
+  await call("Page.reload");
+  await wait(
+    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+  );
+  if (
+    (await evaluate("document.getElementById('environment-select').value")) !==
+    customId
+  )
+    throw Error("Selection not restored");
+  await evaluate(
+    "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
+  );
+  await wait(
+    "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
+  );
+  await evaluate("document.getElementById('export-json').click()");
+  const customFile = join(downloads, `oauth-${customId}-report.json`);
+  let customReport;
+  for (let i = 0; i < 50; i++) {
+    try {
+      customReport = JSON.parse(await readFile(customFile, "utf8"));
+      break;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  if (
+    customReport?.environment !== "CUSTOM_HTTP" ||
+    customReport.environmentId !== customId ||
+    customReport.configuration.baseUrl !== httpTarget.url ||
+    customReport.results[0].target !== httpTarget.url
+  )
+    throw Error("Incorrect custom export target");
+  await evaluate("document.getElementById('environment-edit').click()");
+  if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
+    throw Error("Mobile environment form overflow");
+  await writeFile(
+    join(work, "environment-manager.png"),
+    Buffer.from(
+      (await call("Page.captureScreenshot", { format: "png" })).data,
+      "base64",
+    ),
+  );
+  await evaluate("document.getElementById('environment-delete').click()");
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-select').value==='local'",
+  );
+  if (
+    (await evaluate(
+      "document.getElementById('environment-select').options.length",
+    )) !== 1
+  )
+    throw Error("Profile not deleted");
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({
@@ -223,6 +329,12 @@ try {
         "reload clears state",
         "mobile overflow",
         "no browser exceptions",
+        "create/edit/delete environment",
+        "custom HTTP execution",
+        "environment result isolation",
+        "revision invalidates old results",
+        "persisted profile and selection",
+        "custom report target identity",
       ],
       artifactDirectory: work,
     }),
@@ -235,5 +347,6 @@ try {
     await exited;
   }
   await new Promise((r) => server.close(r));
+  await httpTarget.close();
   await rm(profile, { recursive: true, force: true });
 }
