@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OAuth Security Lab</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="/"
+        >◈ <span>OAuth<span class="muted"> / LAB</span></span></a
+      >
+      <div class="nav-label">WORKSPACE</div>
+      <div class="nav-active">▦　安全測試台</div>
+      <div class="aside-note">
+        PROTOCOL EXPLORER<br /><span>OAuth 2.0 · Session · JWT</span>
+      </div>
+      <div class="connection"><span class="dot"></span> 本機隔離執行器</div>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <span class="eyebrow">SECURITY TESTING / OVERVIEW</span>
+          <h1>OAuth 安全測試台<span class="cursor">_</span></h1>
+          <p>用可追溯的證據，驗證每一道安全邊界。</p>
+        </div>
+        <span class="mode">● SIMULATION</span>
+      </header>
+      <section class="target-bar">
+        <div>
+          <span class="label">TARGET ENVIRONMENT</span
+          ><strong
+            >隔離協定模擬器
+            <span class="muted">/ loopback fixture</span></strong
+          >
+        </div>
+        <span class="tag">無正式服務連線</span>
+      </section>
+      <div class="notice">
+        ⓘ 此處測量的是本機 fixture。通過結果不代表 auth-service
+        正式環境安全；Google 登入、D1 與瀏覽器 CORS 尚未驗證。
+      </div>
+      <section class="metrics" aria-label="測試統計">
+        <div>
+          <span>已完成測試</span><strong id="total">0</strong
+          ><small>本次工作階段</small>
+        </div>
+        <div>
+          <span>通過</span><strong id="pass" class="green">0</strong
+          ><small>所有斷言成立</small>
+        </div>
+        <div>
+          <span>失敗 / 錯誤</span><strong id="fail">0</strong
+          ><small>需要檢查證據</small>
+        </div>
+        <div>
+          <span>待確認</span><strong id="inconclusive">0</strong
+          ><small>缺少驗證前提</small>
+        </div>
+      </section>
+      <section class="workspace">
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>測試情境 <span id="catalog-count" class="muted"></span></h2>
+            <select id="filter" aria-label="情境分類">
+              <option value="all">所有分類</option>
+              <option>OAuth</option>
+              <option>Session</option>
+              <option>JWT</option>
+              <option>Browser</option>
+            </select>
+          </div>
+          <div id="catalog"></div>
+        </div>
+        <div class="panel detail">
+          <div class="panel-heading">
+            <h2>檢查詳情</h2>
+            <span class="tag">EVIDENCE FIRST</span>
+          </div>
+          <div id="detail">
+            <div class="empty">
+              <span>⌘</span>
+              <h3>選擇情境開始探索</h3>
+              <p>執行後可檢視斷言、HTTP 請求與遮罩後的回應。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel terminal">
+        <div class="panel-heading">
+          <h2><span class="green">›_</span> 執行紀錄</h2>
+          <span class="muted">IN-MEMORY ONLY</span>
+        </div>
+        <pre id="console" role="log" aria-live="polite">
+[ready] 模擬器就緒。尚未執行任何測試。</pre
+        >
+      </section>
+      <footer>
+        <span id="status" role="status"
+          >就緒 · 最多 2 個並行 fixture 請求 / 單一執行情境</span
+        >
+        <div>
+          <button id="export-json" disabled>匯出 JSON</button
+          ><button id="export-md" disabled>匯出 Markdown</button
+          ><button id="cancel" disabled>停止</button
+          ><button id="run" class="primary" disabled>▶ 執行全部情境</button>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
