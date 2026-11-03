@@ -1,23 +1,53 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, generateKeyPairSync, sign } from "node:crypto";
 
 export const CLIENT = "dashboard-test";
 export const ORIGIN = "https://dashboard.test";
 export const REDIRECT = `${ORIGIN}/callback`;
+export const ISSUER = "https://fixture.test";
 
 // A protocol fixture, not a copy of the private service. Never uses real accounts.
-export async function createFixture({ vulnerable = false, fault } = {}) {
+export async function createFixture({
+  vulnerable = false,
+  fault,
+  rateLimit = 100,
+} = {}) {
   const transactions = new Map();
   const sessions = new Map();
   let now = 0;
   let revoked = false;
+  let rateWindow = 0;
+  let rateCount = 0;
+  const { privateKey, publicKey } = generateKeyPairSync("ec", {
+    namedCurve: "prime256v1",
+  });
+  const publicJwk = {
+    ...publicKey.export({ format: "jwk" }),
+    kid: "fixture-key",
+    alg: "ES256",
+    use: "sig",
+  };
+  function issueJwt() {
+    const encode = (value) =>
+      Buffer.from(JSON.stringify(value)).toString("base64url");
+    const message = `${encode({ alg: "ES256", kid: publicJwk.kid })}.${encode({ iss: ISSUER, aud: CLIENT, sub: "isolated-fixture-user", iat: now / 1000, exp: now / 1000 + 900 })}`;
+    return `${message}.${sign("sha256", Buffer.from(message), { key: privateKey, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
+  }
   function seed() {
     const token = randomUUID();
-    sessions.set(token, { expires: now + 3600_000, used: null, next: null });
+    sessions.set(token, {
+      expires: now + 3600_000,
+      used: null,
+      next: null,
+      revoked: false,
+    });
     return token;
   }
   const server = createServer(async (req, res) => {
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader(
+      "Cache-Control",
+      fault === "sensitive-cache" ? "public, max-age=3600" : "no-store",
+    );
     res.setHeader("X-Content-Type-Options", "nosniff");
     const url = new URL(req.url, "http://fixture");
     const reply = (status, data, headers = {}) => {
@@ -26,7 +56,47 @@ export async function createFixture({ vulnerable = false, fault } = {}) {
     };
     if (req.method === "GET" && url.pathname === "/health")
       return reply(200, { ok: true });
+    if (req.method === "GET" && url.pathname === "/jwks")
+      return reply(
+        200,
+        {
+          keys: [
+            {
+              ...publicJwk,
+              ...(fault === "jwks-private"
+                ? { d: "deliberately-invalid-fixture-value" }
+                : {}),
+            },
+          ],
+        },
+        { "Cache-Control": "public, max-age=3600" },
+      );
+    if (
+      req.method === "GET" &&
+      url.pathname === "/.well-known/openid-configuration"
+    )
+      return reply(
+        200,
+        {
+          issuer: ISSUER,
+          authorization_endpoint: `${ISSUER}/authorize`,
+          token_endpoint: `${ISSUER}/token`,
+          end_session_endpoint: `${ISSUER}/logout`,
+          jwks_uri: `${ISSUER}/${fault === "discovery" ? "wrong-jwks" : "jwks"}`,
+          response_types_supported: ["code"],
+          subject_types_supported: ["public"],
+          id_token_signing_alg_values_supported: ["ES256"],
+          code_challenge_methods_supported: ["S256"],
+        },
+        { "Cache-Control": "public, max-age=3600" },
+      );
     if (req.method === "GET" && url.pathname === "/authorize") {
+      if (now - rateWindow >= 60_000) {
+        rateWindow = now;
+        rateCount = 0;
+      }
+      if (++rateCount > rateLimit && fault !== "rate-limit")
+        return reply(429, { error: "rate_limited" }, { "Retry-After": "60" });
       if (
         url.searchParams.get("client_id") !== CLIENT &&
         fault !== "authorize-client"
@@ -84,7 +154,8 @@ export async function createFixture({ vulnerable = false, fault } = {}) {
         },
       );
     }
-    if (req.method === "POST" && url.pathname === "/token") {
+    if (req.method === "POST" && ["/token", "/logout"].includes(url.pathname)) {
+      const isLogout = url.pathname === "/logout";
       let body = "";
       for await (const chunk of req) {
         body += chunk;
@@ -94,20 +165,45 @@ export async function createFixture({ vulnerable = false, fault } = {}) {
       try {
         input = JSON.parse(body);
       } catch {
-        return reply(400, { error: "invalid_json" });
+        return reply(
+          400,
+          fault === "error-leak"
+            ? {
+                error: "invalid_json",
+                stack: "Error: fixture parse failure at internal handler",
+              }
+            : { error: "invalid_json" },
+        );
       }
-      if (input?.client_id !== CLIENT && fault !== "token-client")
+      if (
+        input?.client_id !== CLIENT &&
+        fault !== (isLogout ? "logout-client" : "token-client")
+      )
         return reply(400, { error: "invalid_client" });
-      if (req.headers.origin !== ORIGIN && fault !== "token-origin")
+      if (
+        req.headers.origin !== ORIGIN &&
+        fault !== (isLogout ? "logout-origin" : "token-origin")
+      )
         return reply(403, { error: "invalid_origin" });
       res.setHeader("Access-Control-Allow-Origin", ORIGIN);
       const token = /(?:^|;\s*)__Host-rt=([^;]+)/.exec(
         req.headers.cookie || "",
       )?.[1];
       let session = sessions.get(token);
+      if (isLogout) {
+        if (session && fault !== "logout-revoke") {
+          if (input.all === true && fault !== "logout-all") revoked = true;
+          else session.revoked = true;
+        }
+        res.writeHead(204, {
+          "Set-Cookie":
+            "__Host-rt=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
+        });
+        return res.end();
+      }
       if (fault === "token-session" && (!session || session.expires <= now))
         session = sessions.get(seed());
-      if (revoked || !session || session.expires <= now)
+      if (revoked || !session || session.revoked || session.expires <= now)
         return reply(401, { error: "login_required" });
       if (session.used !== null && now - session.used > 30_000) {
         revoked = fault !== "reuse-revoke";
@@ -140,6 +236,7 @@ export async function createFixture({ vulnerable = false, fault } = {}) {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     seed,
+    issueJwt,
     advance: (ms) => {
       now += ms;
     },

@@ -1,7 +1,20 @@
-import { generateKeyPairSync, sign, verify, randomUUID } from "node:crypto";
-import { createFixture, CLIENT, ORIGIN, REDIRECT } from "./fixture.js";
+import {
+  generateKeyPairSync,
+  sign,
+  verify,
+  randomUUID,
+  createPublicKey,
+} from "node:crypto";
+import { createFixture, CLIENT, ORIGIN, REDIRECT, ISSUER } from "./fixture.js";
 
 export const catalog = [
+  [
+    "security-headers",
+    "敏感回應快取與標頭盤點",
+    "Session",
+    "medium",
+    "Token 回應必須 no-store；缺少一般安全標頭列為建議，不逕稱可利用漏洞",
+  ],
   [
     "authorize-valid",
     "合法 OAuth 授權流程",
@@ -100,6 +113,62 @@ export const catalog = [
     "medium",
     "需要瀏覽器及整合環境；Node 請求不足以證明",
   ],
+  [
+    "logout-session",
+    "單一裝置登出",
+    "Session",
+    "high",
+    "清除 cookie 並撤銷目前 session，其他裝置仍可使用",
+  ],
+  [
+    "logout-all",
+    "所有裝置登出",
+    "Session",
+    "high",
+    "隔離身份的所有 session 都不能再換 token",
+  ],
+  [
+    "logout-origin",
+    "Logout Origin 驗證",
+    "Session",
+    "high",
+    "錯誤或缺少 Origin 不得登出有效 session",
+  ],
+  [
+    "logout-client",
+    "Logout Client 驗證",
+    "Session",
+    "high",
+    "未知 client 不得撤銷 session",
+  ],
+  [
+    "jwks",
+    "JWKS 公鑰與簽章一致性",
+    "JWT",
+    "high",
+    "僅公開 ES256 公鑰，kid 與實際簽章一致",
+  ],
+  [
+    "discovery",
+    "Discovery 端點一致性",
+    "OAuth",
+    "medium",
+    "issuer、各端點與 S256 / ES256 宣告一致；不宣稱完整 OIDC",
+  ],
+  [
+    "rate-limit",
+    "授權限流與恢復",
+    "OAuth",
+    "medium",
+    "有界請求觸發 429、Retry-After，注入時鐘後恢復",
+  ],
+  [
+    "malformed-json",
+    "錯誤 JSON 不洩漏內部資訊",
+    "Session",
+    "medium",
+    "400 錯誤不發 token、不洩漏 stack，後續請求正常",
+  ],
 ].map(([id, title, category, severity, expected]) => ({
   id,
   title,
@@ -115,7 +184,11 @@ export const catalog = [
 }));
 
 export function redact(value, key = "") {
-  if (/cookie|authorization|token|secret|password|email|^sub$/i.test(key))
+  if (
+    /cookie|^authorization$|secret|password|email|^sub$|^(?:(?:access|refresh|id)_)?token$|^(?:d|p|q|dp|dq|qi|k)$/i.test(
+      key,
+    )
+  )
     return "[REDACTED]";
   if (Array.isArray(value)) return value.map((item) => redact(item));
   if (value && typeof value === "object")
@@ -212,7 +285,11 @@ export async function runScenario(
       result.limitation =
         "本機 ES256 verifier fixture；不是 /token 的 JWT 驗證結果。";
     } else {
-      fixture = await createFixture({ vulnerable, fault });
+      fixture = await createFixture({
+        vulnerable,
+        fault,
+        rateLimit: id === "rate-limit" ? 3 : 100,
+      });
       let count = 0;
       async function request(path, options = {}) {
         signal?.throwIfAborted();
@@ -225,15 +302,27 @@ export async function runScenario(
             ? AbortSignal.any([signal, AbortSignal.timeout(3000)])
             : AbortSignal.timeout(3000),
         });
-        const body = await response.json();
+        const text = await response.text();
+        const body = text ? JSON.parse(text) : null;
         const headers = Object.fromEntries(response.headers);
+        let requestBody;
+        if (options.body) {
+          try {
+            requestBody = JSON.parse(options.body);
+          } catch {
+            requestBody = {
+              malformedJson: true,
+              bytes: Buffer.byteLength(options.body),
+            };
+          }
+        }
         evidence.push(
           redact({
             request: {
               method: options.method || "GET",
               path,
               headers: options.headers || {},
-              body: options.body ? JSON.parse(options.body) : undefined,
+              body: requestBody,
             },
             response: { status: response.status, headers, body },
           }),
@@ -264,7 +353,199 @@ export async function runScenario(
         !r.body.access_token &&
         !r.headers["set-cookie"] &&
         !r.headers.location;
-      if (id === "authorize-valid") {
+      const logout = (
+        session,
+        { all = false, origin = ORIGIN, client = CLIENT } = {},
+      ) =>
+        request("/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(origin ? { Origin: origin } : {}),
+            Cookie: `__Host-rt=${session}`,
+          },
+          body: JSON.stringify({ client_id: client, all }),
+        });
+      if (id === "security-headers") {
+        const response = await token(fixture.seed());
+        assert(
+          "實際發 token 的回應禁止快取",
+          response.status === 200 &&
+            response.body.access_token &&
+            response.headers["cache-control"] === "no-store",
+        );
+        result.recommendations = [
+          "content-security-policy",
+          "strict-transport-security",
+          "referrer-policy",
+        ]
+          .filter((header) => !response.headers[header])
+          .map(
+            (header) =>
+              `未觀察到 ${header}；應依正式 HTTPS 部署與頁面用途評估。`,
+          );
+        result.limitation =
+          "缺少一般安全標頭僅列建議；loopback HTTP 不適合驗證正式 HSTS。";
+      } else if (id === "logout-session" || id === "logout-all") {
+        const first = fixture.seed();
+        const other = fixture.seed();
+        const response = await logout(first, { all: id === "logout-all" });
+        assert(
+          "登出 204 並用安全屬性清除 cookie",
+          response.status === 204 &&
+            response.body === null &&
+            /__Host-rt=;/.test(response.headers["set-cookie"]) &&
+            /Max-Age=0/.test(response.headers["set-cookie"]) &&
+            /Secure; HttpOnly; SameSite=Lax; Path=\//.test(
+              response.headers["set-cookie"],
+            ),
+        );
+        assert(
+          "保留舊 cookie 也無法再取得 token",
+          denied(await token(first), 401, "login_required"),
+        );
+        const followup = await token(other);
+        assert(
+          id === "logout-all" ? "另一裝置亦被撤銷" : "另一裝置仍可取得 token",
+          id === "logout-all"
+            ? denied(followup, 401, "login_required")
+            : followup.status === 200 && followup.body.access_token,
+        );
+      } else if (id === "logout-origin" || id === "logout-client") {
+        const session = fixture.seed();
+        const cases =
+          id === "logout-origin"
+            ? [{ origin: null }, { origin: "https://evil.test" }]
+            : [{ client: "unknown" }];
+        for (const options of cases) {
+          const response = await logout(session, options);
+          assert(
+            "不合法登出回應且不清除 cookie",
+            denied(
+              response,
+              id === "logout-origin" ? 403 : 400,
+              id === "logout-origin" ? "invalid_origin" : "invalid_client",
+            ),
+          );
+        }
+        const followup = await token(session);
+        assert(
+          "拒絕登出後 session 仍有效",
+          followup.status === 200 && followup.body.access_token,
+        );
+      } else if (id === "jwks") {
+        const response = await request("/jwks");
+        const keys = response.body.keys;
+        assert(
+          "200 JSON 與公鑰快取策略",
+          response.status === 200 &&
+            response.headers["content-type"].includes("application/json") &&
+            response.headers["cache-control"] === "public, max-age=3600",
+        );
+        assert(
+          "只公開 ES256 P-256 簽章公鑰",
+          Array.isArray(keys) &&
+            keys.length === 1 &&
+            keys.every(
+              (key) =>
+                key.kty === "EC" &&
+                key.crv === "P-256" &&
+                key.alg === "ES256" &&
+                key.use === "sig" &&
+                key.x &&
+                key.y &&
+                !["d", "p", "q", "dp", "dq", "qi", "k"].some(
+                  (name) => name in key,
+                ),
+            ),
+        );
+        const parts = fixture.issueJwt().split(".");
+        const header = JSON.parse(Buffer.from(parts[0], "base64url"));
+        const key = keys.find((key) => key.kid === header.kid);
+        assert(
+          "kid / alg 與公開金鑰可驗證實際 fixture JWT",
+          header.alg === "ES256" &&
+            key &&
+            verify(
+              "sha256",
+              Buffer.from(parts.slice(0, 2).join(".")),
+              {
+                key: createPublicKey({ key, format: "jwk" }),
+                dsaEncoding: "ieee-p1363",
+              },
+              Buffer.from(parts[2], "base64url"),
+            ),
+        );
+      } else if (id === "discovery") {
+        const response = await request("/.well-known/openid-configuration");
+        const metadata = response.body;
+        assert(
+          "200 與公開 metadata 快取",
+          response.status === 200 &&
+            response.headers["cache-control"] === "public, max-age=3600",
+        );
+        assert(
+          "issuer 與端點完全一致",
+          metadata.issuer === ISSUER &&
+            metadata.authorization_endpoint === `${ISSUER}/authorize` &&
+            metadata.token_endpoint === `${ISSUER}/token` &&
+            metadata.end_session_endpoint === `${ISSUER}/logout` &&
+            metadata.jwks_uri === `${ISSUER}/jwks`,
+        );
+        assert(
+          "宣告 code / public / S256 / ES256",
+          metadata.response_types_supported?.includes("code") &&
+            metadata.subject_types_supported?.includes("public") &&
+            metadata.code_challenge_methods_supported?.includes("S256") &&
+            metadata.id_token_signing_alg_values_supported?.includes("ES256"),
+        );
+        result.limitation =
+          "只驗證 metadata 與 fixture 一致性；不是完整 OIDC 認證。";
+      } else if (id === "rate-limit") {
+        for (let i = 0; i < 3; i++)
+          assert(
+            `限額內第 ${i + 1} 個請求正常`,
+            (await request(authorize())).status === 302,
+          );
+        const limited = await request(authorize());
+        assert(
+          "超額回 429、Retry-After 且無新交易 cookie",
+          denied(limited, 429, "rate_limited") &&
+            limited.headers["retry-after"] === "60",
+        );
+        fixture.advance(60_000);
+        assert(
+          "注入時鐘後配額恢復",
+          (await request(authorize())).status === 302,
+        );
+        result.limitation =
+          "本機固定窗口配額為 3；正式 Cloudflare 每機房限流並非此精確計數模型。";
+      } else if (id === "malformed-json") {
+        const response = await request("/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: ORIGIN },
+          body: '{"client_id":',
+        });
+        assert(
+          "錯誤 JSON 400 且不發 token",
+          denied(response, 400, "invalid_json"),
+        );
+        assert(
+          "不洩漏 stack 或內部例外",
+          !/stack|trace|internal|SyntaxError|Error:/.test(
+            JSON.stringify(response.body),
+          ),
+        );
+        const valid = await token(fixture.seed());
+        assert(
+          "錯誤後有效請求仍可取得 token",
+          valid.status === 200 &&
+            valid.body.access_token &&
+            valid.headers["cache-control"] === "no-store",
+        );
+        result.limitation =
+          "fixture 使用 invalid_json；auth-service 對 JSON parse 失敗以 invalid_client 正規化。";
+      } else if (id === "authorize-valid") {
         const r = await request(authorize());
         assert(
           "合法授權建立 mock 交易與 state cookie",
@@ -464,7 +745,7 @@ export function markdownReport(report) {
     report.results
       .map(
         (r) =>
-          `## ${r.title}: ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${r.limitation || ""}\n\nEvidence:\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
+          `## ${r.title}: ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\nEvidence:\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
       )
       .join("\n")
   );

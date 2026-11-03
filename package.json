@@ -10,6 +10,8 @@
     "start": "node src/server.js",
     "test": "node --test",
     "test:browser": "node scripts/browser-smoke.mjs",
-    "check": "node --check src/server.js && node --check src/runner.js && node --check src/fixture.js && node --check public/app.js"
+    "test:auth-service": "node scripts/auth-service-smoke.mjs",
+    "test:auth-browser": "node scripts/auth-service-browser.mjs",
+    "check": "node scripts/check.mjs"
   }
 }

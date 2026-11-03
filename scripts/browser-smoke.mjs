@@ -10,6 +10,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dashboardServer } from "../src/server.js";
+import { catalog } from "../src/runner.js";
+const scenarioCount = catalog.length;
+const passCount = scenarioCount - 1;
 const server = dashboardServer();
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -100,11 +103,16 @@ try {
     mobile: false,
   });
   await call("Page.navigate", { url: base });
-  await wait("document.querySelectorAll('.scenario').length===14");
+  await wait(
+    `document.querySelectorAll('.scenario').length===${scenarioCount}`,
+  );
   await evaluate(
     "document.getElementById('filter').value='JWT';document.getElementById('filter').dispatchEvent(new Event('change'))",
   );
-  if ((await evaluate("document.querySelectorAll('.scenario').length")) !== 1)
+  if (
+    (await evaluate("document.querySelectorAll('.scenario').length")) !==
+    catalog.filter((s) => s.category === "JWT").length
+  )
     throw Error("Filter failed");
   await evaluate(
     "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
@@ -116,12 +124,16 @@ try {
     "document.getElementById('filter').value='all';document.getElementById('filter').dispatchEvent(new Event('change'));document.getElementById('run').click()",
   );
   await wait(
-    "document.getElementById('total').textContent==='14' && !document.getElementById('run').disabled",
+    `document.getElementById('total').textContent==='${scenarioCount}' && !document.getElementById('run').disabled`,
   );
   const stats = await evaluate(
     "({pass:document.getElementById('pass').textContent,fail:document.getElementById('fail').textContent,inconclusive:document.getElementById('inconclusive').textContent})",
   );
-  if (stats.pass !== "13" || stats.fail !== "0" || stats.inconclusive !== "1")
+  if (
+    stats.pass !== String(passCount) ||
+    stats.fail !== "0" ||
+    stats.inconclusive !== "1"
+  )
     throw Error(JSON.stringify(stats));
   await evaluate(
     "document.getElementById('export-json').click();document.getElementById('export-md').click()",
@@ -144,8 +156,8 @@ try {
   );
   if (
     report.environment !== "SIMULATION" ||
-    report.results.length !== 14 ||
-    report.results.filter((r) => r.status === "PASS").length !== 13 ||
+    report.results.length !== scenarioCount ||
+    report.results.filter((r) => r.status === "PASS").length !== passCount ||
     report.results.some((r) => r.cleanup !== "complete")
   )
     throw Error("Invalid exported report");
@@ -192,7 +204,9 @@ try {
   )
     throw Error("Cancel failed");
   await call("Page.reload");
-  await wait("document.querySelectorAll('.scenario').length===14");
+  await wait(
+    `document.querySelectorAll('.scenario').length===${scenarioCount}`,
+  );
   if ((await evaluate("document.getElementById('total').textContent")) !== "0")
     throw Error("Unexpected persistence");
   if (errors.length) throw Error(JSON.stringify(errors));
