@@ -20,12 +20,12 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 沒有連接正式 auth-service 或真實 Google、Cloudflare D1。沒有瀏覽器 CORS / SameSite / Secure cookie 的實證。模擬器不提供 logout、JWKS、discovery 或 rate-limiter 實作。
 
-未對每項控制實作完整 vulnerable mutation matrix；目前明確驗證 redirect 控制退化可被偵測。其餘應在接入真實服務前補上獨立負向 fixture 與應用原始測試。
+已加入獨立控制退化矩陣：redirect、authorize client、state 長度、callback cookie、callback replay、token client、Origin、session、重複輪替 cookie、提前拒絕寬限，以及未撤銷後繼 session。各自停用單一控制後，情境必須產生 FAIL、保留 HTTP 證據並完成清理。fault 僅供本機測試注入，控制 API 拒絕此欄位。JWT 情境另以有效簽章對照竄改簽章／claims；尚未涵蓋所有可能的 verifier mutation。
 
 ## 本次驗證結果（2026-11-03）
 
 - `npm run check` 通過語法檢查；非 TypeScript 型別或 lint 檢查。
-- `npm test`：20 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
+- `npm test`：30 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
 - Chromium 操作驗證：13 個 PASS、1 個 INCONCLUSIVE、0 個 FAIL / ERROR；分類、單次執行、全部執行、停止、JSON / Markdown 下載、刷新清除結果、手機無水平溢出均通過，無瀏覽器例外。
 - `npm start` 實際啟動，`/api/health` 回傳正常，透過 `/api/run` 執行 rotation 得到 PASS、3 筆 HTTP 證據與完整清理。
 - 一般執行沙箱限制 socket 連線；本次 Git 與 loopback 驗證使用環境核准的執行方式，未關閉 TLS 驗證或更換憑證。
