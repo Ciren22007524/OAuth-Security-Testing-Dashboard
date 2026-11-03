@@ -18,14 +18,18 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 已唯讀核對 auth-service commit `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13`：client state 上限 512、provider state 由伺服器產生、`__Host-oauth_state` 的 10 分鐘交易、callback 到期導回 `login_expired`，以及寬限期內不再次換 cookie。模擬器沿用這些邊界，但以 JSON 正規化錯誤（正式 authorize / callback 使用 HTML），省略清除 cookie、真實 provider、D1、PKCE 與身份 allowlist。它仍不能當成 production 測試結果。
 
-沒有連接正式 auth-service 或真實 Google、Cloudflare D1。沒有瀏覽器 CORS / SameSite / Secure cookie 的實證。模擬器不提供 logout、JWKS、discovery 或 rate-limiter 實作。
+沒有連接正式 auth-service 或真實 Google、Cloudflare D1。沒有瀏覽器 CORS / SameSite / Secure cookie 的實證。模擬器已提供 logout、JWKS、discovery 與固定窗口限流；另有真實 Hono 原始碼與 Chromium 的隔離本機整合驗證，見 `LOCAL_INTEGRATION.md`。
 
-已加入獨立控制退化矩陣：redirect、authorize client、state 長度、callback cookie、callback replay、token client、Origin、session、重複輪替 cookie、提前拒絕寬限，以及未撤銷後繼 session。各自停用單一控制後，情境必須產生 FAIL、保留 HTTP 證據並完成清理。fault 僅供本機測試注入，控制 API 拒絕此欄位。JWT 情境另以有效簽章對照竄改簽章／claims；尚未涵蓋所有可能的 verifier mutation。
+已加入獨立控制退化矩陣：redirect、authorize client、state 長度、callback cookie、callback replay、token client、Origin、session、重複輪替 cookie、提前拒絕寬限，以及未撤銷後繼 session；另加入登出撤銷、全裝置登出、登出 client／Origin、JWKS 私密欄位、discovery 路徑、限流、stack 洩漏與敏感回應快取。各自停用單一控制後，情境必須產生 FAIL、保留 HTTP 證據並完成清理。fault 僅供本機測試注入，控制 API 拒絕此欄位。JWT 情境另以有效簽章對照竄改簽章／claims；尚未涵蓋所有可能的 verifier mutation。
 
 ## 本次驗證結果（2026-11-03）
 
 - `npm run check` 通過語法檢查；非 TypeScript 型別或 lint 檢查。
-- `npm test`：30 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
-- Chromium 操作驗證：13 個 PASS、1 個 INCONCLUSIVE、0 個 FAIL / ERROR；分類、單次執行、全部執行、停止、JSON / Markdown 下載、刷新清除結果、手機無水平溢出均通過，無瀏覽器例外。
+- `npm test`：48 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
+- Chromium 操作驗證：22 個 PASS、1 個 INCONCLUSIVE、0 個 FAIL / ERROR；分類、單次執行、全部執行、停止、JSON / Markdown 下載、刷新清除結果、手機無水平溢出均通過，無瀏覽器例外。
 - `npm start` 實際啟動，`/api/health` 回傳正常，透過 `/api/run` 執行 rotation 得到 PASS、3 筆 HTTP 證據與完整清理。
 - 一般執行沙箱限制 socket 連線；本次 Git 與 loopback 驗證使用環境核准的執行方式，未關閉 TLS 驗證或更換憑證。
+
+- auth-service `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13` 原有 51 個測試通過；追蹤檔案未修改。
+- `test:auth-service`：11 組真實路由整合通過，包含真正的並行 token 請求；環境為 LOCAL_SOURCE。
+- `test:auth-browser`：10 個實際 Chromium 斷言通過；環境為 LOCAL_SOURCE_BROWSER，仍不代表正式 Google／D1／HTTPS／跨站驗收。

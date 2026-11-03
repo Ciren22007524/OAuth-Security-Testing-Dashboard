@@ -21,11 +21,11 @@ npm run test:browser
 
 ## 可驗證的範圍
 
-14 個情境涵蓋 client / redirect / state 驗證、callback cookie 與重播、Origin、refresh session 過期、並行輪替、30 秒重用寬限與撤銷，以及本機 ES256 JWT verifier。每個 HTTP 情境啟動自己的隔離模擬器；時鐘可注入，不必等待 30 秒。結果為 PASS / FAIL / INCONCLUSIVE / ERROR。
+23 個情境涵蓋 client / redirect / state 驗證、callback cookie 與重播、Origin、refresh session 過期、並行輪替、30 秒重用寬限與撤銷、單裝置／全裝置登出、JWKS／discovery、限流、錯誤處理及安全標頭盤點。每個 HTTP 情境啟動自己的隔離模擬器；時鐘可注入，不必等待 30 秒。結果為 PASS / FAIL / INCONCLUSIVE / ERROR。缺少一般安全標頭僅列建議，不直接宣稱可利用漏洞。
 
 **SIMULATION 通過不代表正式 auth-service 通過。** 模擬器是明確定義的協定 fixture，不是從私有服務複製的實作。Token endpoint 產生的是 opaque fixture 值；JWT 驗證情境另用 Node crypto 產生本機 ES256 簽章。JWT 驗證不是 `/token` 的職責。
 
-真實瀏覽器 CORS 情境明確回報 INCONCLUSIVE。Google OAuth 登入、正式 D1、JWKS、discovery、logout 與實際 auth-service 的整合尚未驗證。現版本完全不開放 live target，不能透過 API 傳入外部 URL。
+儀表板內的瀏覽器 CORS 情境仍回報 INCONCLUSIVE，不會自動把其他環境的結果混入模擬結果。另提供可選的真實 auth-service 原始碼整合與 Chromium CORS 指令，詳見 [本機整合驗證](docs/LOCAL_INTEGRATION.md)。已驗證真實路由的 JWKS、discovery、logout、限流、並行輪替等行為；使用假 Google 與記憶體資料，不是正式 Google 登入或 D1 驗收。現版本完全不開放 live target，不能透過 API 傳入外部 URL。
 
 ## 隔離與證據
 

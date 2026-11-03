@@ -45,6 +45,15 @@ for (const [scenario, fault] of [
   ["rotation", "duplicate-rotation-cookie"],
   ["reuse-grace", "reject-grace"],
   ["reuse-revoke", "reuse-revoke"],
+  ["logout-session", "logout-revoke"],
+  ["logout-all", "logout-all"],
+  ["logout-origin", "logout-origin"],
+  ["logout-client", "logout-client"],
+  ["jwks", "jwks-private"],
+  ["discovery", "discovery"],
+  ["rate-limit", "rate-limit"],
+  ["malformed-json", "error-leak"],
+  ["security-headers", "sensitive-cache"],
 ]) {
   test(`control regression is detected: ${scenario}`, async () => {
     const result = await runScenario(scenario, { fault });
@@ -102,9 +111,11 @@ test("nested sensitive data is redacted in reports", () => {
       ok: true,
     },
     path: "/callback?state=private&code=private&access_token=private&refresh_token=private",
+    jwk: { d: "private", k: "private", x: "public" },
   });
   assert.ok(!JSON.stringify(value).includes("private"));
   assert.equal(value.response.ok, true);
+  assert.equal(value.jwk.x, "public");
   const report = makeReport([
     {
       title: "example",
