@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { dashboardServer } from "../src/server.js";
+import { catalog as scenarios } from "../src/runner.js";
 
 test("dashboard serves assets and runs only same-origin simulation requests", async () => {
   const server = dashboardServer();
@@ -18,7 +19,7 @@ test("dashboard serves assets and runs only same-origin simulation requests", as
     }
     const catalog = await (await fetch(base + "/api/catalog")).json();
     assert.equal(catalog.environment, "SIMULATION");
-    assert.equal(catalog.catalog.length, 14);
+    assert.equal(catalog.catalog.length, scenarios.length);
     const request = (body, origin = base) =>
       fetch(base + "/api/run", {
         method: "POST",

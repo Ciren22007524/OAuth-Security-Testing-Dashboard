@@ -83,6 +83,12 @@ function detail() {
     wrap.append(list);
     if (result.limitation || result.error)
       wrap.append(element("p", result.limitation || result.error));
+    if (result.recommendations?.length) {
+      const recommendations = element("ul");
+      for (const recommendation of result.recommendations)
+        recommendations.append(element("li", recommendation));
+      wrap.append(element("h4", "RECOMMENDATIONS / 建議事項"), recommendations);
+    }
     wrap.append(
       element("h4", "REDACTED HTTP EVIDENCE"),
       element(
@@ -174,7 +180,7 @@ function exportReport(format) {
         report.results
           .map(
             (r) =>
-              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${r.limitation || ""}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
+              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
           )
           .join("\n");
   const url = URL.createObjectURL(
