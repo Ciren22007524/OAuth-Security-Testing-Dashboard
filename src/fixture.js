@@ -6,7 +6,7 @@ export const ORIGIN = "https://dashboard.test";
 export const REDIRECT = `${ORIGIN}/callback`;
 
 // A protocol fixture, not a copy of the private service. Never uses real accounts.
-export async function createFixture({ vulnerable = false } = {}) {
+export async function createFixture({ vulnerable = false, fault } = {}) {
   const transactions = new Map();
   const sessions = new Map();
   let now = 0;
@@ -27,12 +27,15 @@ export async function createFixture({ vulnerable = false } = {}) {
     if (req.method === "GET" && url.pathname === "/health")
       return reply(200, { ok: true });
     if (req.method === "GET" && url.pathname === "/authorize") {
-      if (url.searchParams.get("client_id") !== CLIENT)
+      if (
+        url.searchParams.get("client_id") !== CLIENT &&
+        fault !== "authorize-client"
+      )
         return reply(400, { error: "invalid_client" });
       if (url.searchParams.get("redirect_uri") !== REDIRECT && !vulnerable)
         return reply(400, { error: "invalid_redirect_uri" });
       const state = url.searchParams.get("state");
-      if (!state || state.length > 512)
+      if ((!state || state.length > 512) && fault !== "state-bounds")
         return reply(400, { error: "invalid_state" });
       const providerState = randomUUID();
       transactions.set(providerState, {
@@ -54,9 +57,13 @@ export async function createFixture({ vulnerable = false } = {}) {
         req.headers.cookie || "",
       )?.[1];
       const transaction = transactions.get(state);
-      if (!state || state !== cookie || !transaction)
+      if (
+        !state ||
+        !transaction ||
+        (state !== cookie && fault !== "callback-cookie")
+      )
         return reply(400, { error: "invalid_state" });
-      transactions.delete(state);
+      if (fault !== "callback-replay") transactions.delete(state);
       const back = new URL(REDIRECT);
       back.searchParams.set("state", transaction.clientState);
       if (transaction.expires < now) {
@@ -89,21 +96,25 @@ export async function createFixture({ vulnerable = false } = {}) {
       } catch {
         return reply(400, { error: "invalid_json" });
       }
-      if (input?.client_id !== CLIENT)
+      if (input?.client_id !== CLIENT && fault !== "token-client")
         return reply(400, { error: "invalid_client" });
-      if (req.headers.origin !== ORIGIN)
+      if (req.headers.origin !== ORIGIN && fault !== "token-origin")
         return reply(403, { error: "invalid_origin" });
       res.setHeader("Access-Control-Allow-Origin", ORIGIN);
       const token = /(?:^|;\s*)__Host-rt=([^;]+)/.exec(
         req.headers.cookie || "",
       )?.[1];
-      const session = sessions.get(token);
+      let session = sessions.get(token);
+      if (fault === "token-session" && (!session || session.expires <= now))
+        session = sessions.get(seed());
       if (revoked || !session || session.expires <= now)
         return reply(401, { error: "login_required" });
       if (session.used !== null && now - session.used > 30_000) {
-        revoked = true;
+        revoked = fault !== "reuse-revoke";
         return reply(401, { error: "login_required" });
       }
+      if (session.used !== null && fault === "reject-grace")
+        return reply(401, { error: "login_required" });
       let headers = {};
       if (session.used === null) {
         session.used = now;
@@ -112,6 +123,10 @@ export async function createFixture({ vulnerable = false } = {}) {
           "Set-Cookie": `__Host-rt=${session.next}; Secure; HttpOnly; SameSite=Lax; Path=/`,
         };
       }
+      if (fault === "duplicate-rotation-cookie")
+        headers = {
+          "Set-Cookie": `__Host-rt=${session.next}; Secure; HttpOnly; SameSite=Lax; Path=/`,
+        };
       // Opaque fixture value: intentionally not presented as a signed JWT.
       return reply(
         200,

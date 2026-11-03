@@ -123,7 +123,10 @@ export function redact(value, key = "") {
       Object.entries(value).map(([k, v]) => [k, redact(v, k)]),
     );
   if (typeof value === "string")
-    return value.replace(/([?&]state=)[^&\s]*/g, "$1[REDACTED]");
+    return value.replace(
+      /([?&](?:state|code|access_token|refresh_token)=)[^&\s]*/gi,
+      "$1[REDACTED]",
+    );
   return value;
 }
 
@@ -176,7 +179,10 @@ function verifierChecks() {
   ];
 }
 
-export async function runScenario(id, { vulnerable = false, signal } = {}) {
+export async function runScenario(
+  id,
+  { vulnerable = false, fault, signal } = {},
+) {
   const scenario = catalog.find((item) => item.id === id);
   if (!scenario) throw new Error("Unknown scenario");
   const started = performance.now();
@@ -206,7 +212,7 @@ export async function runScenario(id, { vulnerable = false, signal } = {}) {
       result.limitation =
         "本機 ES256 verifier fixture；不是 /token 的 JWT 驗證結果。";
     } else {
-      fixture = await createFixture({ vulnerable });
+      fixture = await createFixture({ vulnerable, fault });
       let count = 0;
       async function request(path, options = {}) {
         signal?.throwIfAborted();
