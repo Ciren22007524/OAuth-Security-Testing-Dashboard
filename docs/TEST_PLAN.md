@@ -22,10 +22,10 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 已加入獨立控制退化矩陣：redirect、authorize client、state 長度、callback cookie、callback replay、token client、Origin、session、重複輪替 cookie、提前拒絕寬限，以及未撤銷後繼 session；另加入登出撤銷、全裝置登出、登出 client／Origin、JWKS 私密欄位、discovery 路徑、限流、stack 洩漏與敏感回應快取。各自停用單一控制後，情境必須產生 FAIL、保留 HTTP 證據並完成清理。fault 僅供本機測試注入，控制 API 拒絕此欄位。JWT 情境另以有效簽章對照竄改簽章／claims；尚未涵蓋所有可能的 verifier mutation。
 
-## 本次驗證結果（2026-11-03）
+## 本次驗證結果（2026-11-04）
 
 - `npm run check` 通過語法檢查；非 TypeScript 型別或 lint 檢查。
-- `npm test`：48 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
+- `npm test`：58 個測試通過，0 個失敗、跳過或取消；其中驗證 browser-cors 情境必須回報 INCONCLUSIVE。
 - Chromium 操作驗證：22 個 PASS、1 個 INCONCLUSIVE、0 個 FAIL / ERROR；分類、單次執行、全部執行、停止、JSON / Markdown 下載、刷新清除結果、手機無水平溢出均通過，無瀏覽器例外。
 - `npm start` 實際啟動，`/api/health` 回傳正常，透過 `/api/run` 執行 rotation 得到 PASS、3 筆 HTTP 證據與完整清理。
 - 一般執行沙箱限制 socket 連線；本次 Git 與 loopback 驗證使用環境核准的執行方式，未關閉 TLS 驗證或更換憑證。
@@ -33,3 +33,11 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 - auth-service `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13` 原有 51 個測試通過；追蹤檔案未修改。
 - `test:auth-service`：11 組真實路由整合通過，包含真正的並行 token 請求；環境為 LOCAL_SOURCE。
 - `test:auth-browser`：10 個實際 Chromium 斷言通過；環境為 LOCAL_SOURCE_BROWSER，仍不代表正式 Google／D1／HTTPS／跨站驗收。
+
+## 環境模組驗證
+
+- 設定持久化、100 個上限、同程序寫入佇列、版本衝突、唯讀預設環境、損壞設定拒絕覆寫、URL／機密欄位拒絕；已實際建立 100 個環境驗證第 101 個遭拒絕。
+- HTTP runner 的有效設定對照、缺少／未登記設定的 INCONCLUSIVE、指定目標、遮罩、手動 redirect、429／等待期、取消及回應大小界限。
+- Chromium：環境新增／修改／刪除、HTTP health 實際執行、切換保留各環境結果、修改後不沿用舊版本結果、重整保留環境與選擇、正確匯出目標與手機表單皆通過。
+- `AUTH_SERVICE_PATH=/tmp/oauth-auth-service-review npm run test:auth-environments`：真實 Hono HTTP bridge 全部 10 個情境 PASS；假 provider／記憶體 store，不是正式服務驗收。
+- `--use-env-proxy` 啟動方式下，本機模擬 rotation 與自訂 loopback health 均實際通過，未移除代理或停用 TLS。
