@@ -112,10 +112,16 @@ test("nested sensitive data is redacted in reports", () => {
     },
     path: "/callback?state=private&code=private&access_token=private&refresh_token=private",
     jwk: { d: "private", k: "private", x: "public" },
+    nested: {
+      accessToken: "private",
+      jwt: "private",
+      note: "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.c2lnbmF0dXJl",
+    },
   });
   assert.ok(!JSON.stringify(value).includes("private"));
   assert.equal(value.response.ok, true);
   assert.equal(value.jwk.x, "public");
+  assert.equal(value.nested.note, "[REDACTED]");
   const report = makeReport([
     {
       title: "example",

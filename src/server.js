@@ -2,9 +2,17 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { catalog, runScenario } from "./runner.js";
+import { createEnvironmentStore, EnvironmentError } from "./environments.js";
+import { createHttpRunner, httpCatalog } from "./http-runner.js";
 
-export function dashboardServer() {
+export function dashboardServer({
+  environmentsFile = process.env.DASHBOARD_ENVIRONMENTS_FILE ||
+    fileURLToPath(new URL("../.local/environments.json", import.meta.url)),
+  httpInterval = 500,
+} = {}) {
   let active = false;
+  const environments = createEnvironmentStore(environmentsFile);
+  const runHttp = createHttpRunner({ minimumInterval: httpInterval });
   return createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -21,12 +29,30 @@ export function dashboardServer() {
       const host = req.headers.host;
       if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host))
         return json(403, { error: "invalid_host" });
-      const path = new URL(req.url, `http://${host}`).pathname;
-      if (req.method === "GET" && path === "/api/catalog")
-        return json(200, { environment: "SIMULATION", catalog });
+      const url = new URL(req.url, `http://${host}`);
+      const path = url.pathname;
+      if (req.method === "GET" && path === "/api/environments")
+        return json(200, { environments: await environments.list() });
+      if (req.method === "GET" && path === "/api/catalog") {
+        const profile = await environments.get(
+          url.searchParams.get("environmentId") || "local",
+        );
+        return json(200, {
+          environment:
+            profile.type === "simulation" ? "SIMULATION" : "CUSTOM_HTTP",
+          profile,
+          catalog: profile.type === "simulation" ? catalog : httpCatalog,
+        });
+      }
       if (req.method === "GET" && path === "/api/health")
         return json(200, { ok: true, environment: "SIMULATION" });
-      if (req.method === "POST" && path === "/api/run") {
+      const profileMatch = /^\/api\/environments(?:\/([a-z0-9-]+))?$/.exec(
+        path,
+      );
+      if (
+        (profileMatch && ["POST", "PUT", "DELETE"].includes(req.method)) ||
+        (req.method === "POST" && path === "/api/run")
+      ) {
         if (
           req.headers.origin !== `http://${host}` ||
           req.headers["content-type"] !== "application/json"
@@ -36,7 +62,8 @@ export function dashboardServer() {
         let raw = "";
         for await (const chunk of req) {
           raw += chunk;
-          if (raw.length > 1024) return json(413, { error: "body_too_large" });
+          if (Buffer.byteLength(raw) > 8192)
+            return json(413, { error: "body_too_large" });
         }
         let input;
         try {
@@ -44,22 +71,69 @@ export function dashboardServer() {
         } catch {
           return json(400, { error: "invalid_json" });
         }
-        if (
-          !catalog.some((s) => s.id === input?.id) ||
-          Object.keys(input).some((k) => k !== "id")
-        )
-          return json(400, { error: "invalid_scenario" });
-        // Another request may finish reading its body while this one awaits data.
+        if (!input || typeof input !== "object" || Array.isArray(input))
+          return json(400, { error: "invalid_input" });
         if (active) return json(429, { error: "runner_busy" });
         active = true;
-        const controller = new AbortController();
-        res.on("close", () => {
-          if (!res.writableEnded) controller.abort();
-        });
         try {
+          if (profileMatch) {
+            const environmentId = profileMatch[1];
+            if (req.method === "POST" && !environmentId)
+              return json(201, await environments.create(input));
+            if (req.method === "PUT" && environmentId) {
+              const { revision, ...profile } = input;
+              return json(
+                200,
+                await environments.update(environmentId, revision, profile),
+              );
+            }
+            if (
+              req.method === "DELETE" &&
+              environmentId &&
+              Object.keys(input).length === 1
+            )
+              return json(
+                200,
+                await environments.remove(environmentId, input.revision),
+              );
+            return json(400, { error: "invalid_environment_operation" });
+          }
+          const profile = await environments.get(
+            input.environmentId || "local",
+          );
+          const selectedCatalog =
+            profile.type === "simulation" ? catalog : httpCatalog;
+          if (
+            !selectedCatalog.some((s) => s.id === input.id) ||
+            Object.keys(input).some(
+              (k) =>
+                !["id", "environmentId", "environmentRevision"].includes(k),
+            )
+          )
+            return json(400, { error: "invalid_scenario" });
+          if (
+            (profile.id !== "local" ||
+              input.environmentRevision !== undefined) &&
+            input.environmentRevision !== profile.revision
+          )
+            return json(409, { error: "environment_changed" });
+          const controller = new AbortController();
+          res.on("close", () => {
+            if (!res.writableEnded) controller.abort();
+          });
           return json(
             200,
-            await runScenario(input.id, { signal: controller.signal }),
+            profile.type === "http"
+              ? await runHttp(input.id, profile, { signal: controller.signal })
+              : {
+                  ...(await runScenario(input.id, {
+                    signal: controller.signal,
+                  })),
+                  environmentId: profile.id,
+                  environmentName: profile.name,
+                  environmentRevision: profile.revision,
+                  configuration: profile,
+                },
           );
         } finally {
           active = false;
@@ -78,8 +152,14 @@ export function dashboardServer() {
       );
       res.writeHead(200, { "Content-Type": type });
       res.end(content);
-    } catch {
-      if (!res.headersSent) json(500, { error: "internal_error" });
+    } catch (error) {
+      if (!res.headersSent)
+        json(error instanceof EnvironmentError ? error.status : 500, {
+          error:
+            error instanceof EnvironmentError
+              ? error.message
+              : "internal_error",
+        });
       else res.end();
     }
   });
@@ -91,7 +171,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("Invalid PORT");
   dashboardServer().listen(port, "127.0.0.1", () =>
     console.log(
-      `Dashboard listening on loopback port ${port} (SIMULATION only)`,
+      `Dashboard listening on loopback port ${port} (environment profiles enabled)`,
     ),
   );
 }

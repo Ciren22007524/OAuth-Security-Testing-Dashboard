@@ -1,6 +1,174 @@
 const $ = (id) => document.getElementById(id);
 let catalog = [];
-const results = new Map();
+let results = new Map();
+const resultGroups = new Map();
+let environments = [];
+let currentEnvironment;
+let loadingEnvironment = false;
+let editingEnvironment;
+const mode = () =>
+  currentEnvironment?.type === "http" ? "CUSTOM_HTTP" : "SIMULATION";
+function environmentControls() {
+  $("environment-select").disabled = running || loadingEnvironment;
+  $("environment-new").disabled = running || loadingEnvironment;
+  $("environment-edit").disabled =
+    running ||
+    loadingEnvironment ||
+    !currentEnvironment ||
+    currentEnvironment.builtin;
+}
+async function refreshEnvironments() {
+  const response = await fetch("/api/environments");
+  if (!response.ok) throw new Error("無法載入環境設定");
+  environments = (await response.json()).environments;
+  const validGroups = new Set(
+    environments.map((profile) => `${profile.id}:${profile.revision}`),
+  );
+  for (const key of resultGroups.keys())
+    if (!validGroups.has(key)) resultGroups.delete(key);
+  $("environment-select").replaceChildren(
+    ...environments.map((profile) => {
+      const option = element(
+        "option",
+        `${profile.name} · ${profile.type === "http" ? "HTTP" : "模擬"}`,
+      );
+      option.value = profile.id;
+      return option;
+    }),
+  );
+}
+async function selectEnvironment(id) {
+  if (running) {
+    $("environment-select").value = currentEnvironment.id;
+    return;
+  }
+  loadingEnvironment = true;
+  $("run").disabled = true;
+  environmentControls();
+  try {
+    const response = await fetch(
+      "/api/catalog?environmentId=" + encodeURIComponent(id),
+    );
+    if (!response.ok) throw new Error("無法載入環境；請重新整理設定");
+    const data = await response.json();
+    currentEnvironment = data.profile;
+    catalog = data.catalog;
+    const key = `${currentEnvironment.id}:${currentEnvironment.revision}`;
+    if (!resultGroups.has(key)) resultGroups.set(key, new Map());
+    results = resultGroups.get(key);
+    selected = undefined;
+    $("environment-select").value = currentEnvironment.id;
+    $("environment-mode").textContent = "● " + mode();
+    $("environment-mode").classList.toggle(
+      "http",
+      currentEnvironment.type === "http",
+    );
+    $("environment-target").textContent =
+      currentEnvironment.baseUrl || "隔離協定模擬器";
+    $("environment-notice").textContent =
+      currentEnvironment.type === "http"
+        ? `HTTP 目標：${currentEnvironment.baseUrl}。只執行無登入 session 的有界檢查，不跟隨重新導向；缺少設定會標為待確認。`
+        : "此處測量本機隔離 fixture。結果不代表任何 HTTP 目標或正式服務已通過。";
+    $("catalog-count").textContent = `/ ${catalog.length}`;
+    $("console").textContent =
+      `[ready] ${currentEnvironment.name} · ${mode()}。結果依環境及設定版本分開保留。`;
+    $("status").textContent = `就緒 · ${currentEnvironment.name}`;
+    try {
+      sessionStorage.setItem("oauth-environment-id", currentEnvironment.id);
+    } catch {}
+    render();
+    detail();
+  } catch (error) {
+    if (currentEnvironment)
+      $("environment-select").value = currentEnvironment.id;
+    $("status").textContent = error.message;
+    throw error;
+  } finally {
+    loadingEnvironment = false;
+    $("run").disabled = !currentEnvironment;
+    environmentControls();
+  }
+}
+function profileFields() {
+  const http = $("profile-type").value === "http";
+  $("http-profile-fields").hidden = !http;
+  $("profile-url").required = http;
+  for (const input of $("http-profile-fields").querySelectorAll("input"))
+    input.disabled = !http;
+}
+function openEnvironment(profile) {
+  editingEnvironment = profile;
+  $("environment-dialog-title").textContent = profile ? "管理環境" : "新增環境";
+  $("profile-name").value = profile?.name || "";
+  $("profile-type").value = profile?.type || "http";
+  $("profile-url").value = profile?.baseUrl || "";
+  $("profile-client").value = profile?.clientId || "";
+  $("profile-origin").value = profile?.origin || "";
+  $("profile-redirect").value = profile?.redirectUri || "";
+  $("environment-delete").hidden = !profile;
+  $("environment-error").textContent = "";
+  profileFields();
+  $("environment-dialog").showModal();
+}
+async function saveEnvironment(remove = false) {
+  const form = $("environment-form");
+  const buttons = [...form.querySelectorAll("button")];
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
+  $("environment-error").textContent = "";
+  try {
+    const data = remove
+      ? { revision: editingEnvironment.revision }
+      : {
+          name: $("profile-name").value,
+          type: $("profile-type").value,
+          ...($("profile-type").value === "http"
+            ? {
+                baseUrl: $("profile-url").value,
+                clientId: $("profile-client").value,
+                origin: $("profile-origin").value,
+                redirectUri: $("profile-redirect").value,
+              }
+            : {}),
+          ...(editingEnvironment
+            ? { revision: editingEnvironment.revision }
+            : {}),
+        };
+    const response = await fetch(
+      "/api/environments" +
+        (editingEnvironment ? "/" + editingEnvironment.id : ""),
+      {
+        method: remove ? "DELETE" : editingEnvironment ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      },
+    );
+    const body = await response.json();
+    if (!response.ok) {
+      const messages = {
+        invalid_url:
+          "網址需為 HTTP(S)，且不可含帳密、query 或 fragment；服務網址／Origin 不含路徑。",
+        invalid_environment: "請確認環境名稱及各欄位格式。",
+        environment_changed: "設定已被其他頁面修改，請關閉後重新整理。",
+        unsupported_target: "不支援雲端 metadata 位址。",
+        environment_limit: "已達 100 個自訂環境上限。",
+      };
+      throw new Error(
+        messages[body.error] || `無法儲存環境（${response.status}）`,
+      );
+    }
+    await refreshEnvironments();
+    await selectEnvironment(remove ? "local" : body.id);
+    $("environment-dialog").close();
+  } catch (error) {
+    $("environment-error").textContent = error.message;
+  } finally {
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
+  }
+}
 let selected;
 let controller;
 let running = false;
@@ -51,7 +219,12 @@ function render() {
 }
 function detail() {
   const scenario = catalog.find((s) => s.id === selected);
-  if (!scenario) return;
+  if (!scenario) {
+    $("detail").replaceChildren(
+      element("div", "選擇情境，檢視此環境的測試結果與證據。", "empty"),
+    );
+    return;
+  }
   const result = results.get(selected);
   const wrap = element("div", undefined, "detail-content");
   wrap.append(
@@ -59,7 +232,7 @@ function detail() {
     element("p", scenario.expected),
     element(
       "span",
-      `${result?.status || "未執行"} · SIMULATION`,
+      `${result?.status || "未執行"} · ${result?.environment || mode()}`,
       result?.status || "tag",
     ),
   );
@@ -118,11 +291,13 @@ function log(text) {
 async function execute(scenarios) {
   if (running) return;
   running = true;
+  environmentControls();
   controller = new AbortController();
   $("run").disabled = true;
   $("cancel").disabled = false;
   render();
   detail();
+  let rateLimited = false;
   try {
     for (const scenario of scenarios) {
       controller.signal.throwIfAborted();
@@ -134,21 +309,31 @@ async function execute(scenarios) {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: scenario.id }),
+        body: JSON.stringify({
+          id: scenario.id,
+          environmentId: currentEnvironment.id,
+          environmentRevision: currentEnvironment.revision,
+        }),
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`執行器 HTTP ${response.status}`);
       const result = await response.json();
       results.set(scenario.id, result);
       log(
-        `${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
+        `[${currentEnvironment.name}] ${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
       );
       render();
       detail();
+      if (result.rateLimited) {
+        rateLimited = true;
+        break;
+      }
       // At most four scenario starts per second from this UI.
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    $("status").textContent = "執行完成 · 所有結果僅適用於本機模擬器";
+    $("status").textContent = rateLimited
+      ? "目標回報限流，已停止剩餘情境；請等待 Retry-After 再執行。"
+      : `執行完成 · ${currentEnvironment.name} · ${mode()}`;
   } catch (error) {
     const message = controller.signal.aborted
       ? "已停止；已完成的結果保留，未執行項目不計入。"
@@ -157,6 +342,7 @@ async function execute(scenarios) {
     log(message);
   } finally {
     running = false;
+    environmentControls();
     $("run").disabled = false;
     $("cancel").disabled = true;
     render();
@@ -167,16 +353,21 @@ function exportReport(format) {
   const report = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    environment: "SIMULATION",
+    environment: mode(),
+    environmentId: currentEnvironment.id,
+    environmentName: currentEnvironment.name,
+    configuration: currentEnvironment,
     limitations: [
-      "僅驗證本機協定與 verifier fixtures；未驗證正式服務、Google 登入、D1 或瀏覽器 CORS。",
+      currentEnvironment.type === "http"
+        ? "僅測試所選 HTTP 目標的公開及無 session 端點；未驗證真實登入、輪替、撤銷或瀏覽器 CORS。"
+        : "僅驗證隔離模擬器；不代表 HTTP 目標、Google 登入、D1 或瀏覽器 CORS 通過。",
     ],
     results: [...results.values()],
   };
   const text =
     format === "json"
       ? JSON.stringify(report, null, 2)
-      : `# OAuth 安全測試報告\n\nSIMULATION · ${report.generatedAt}\n\n${report.limitations.join("\n")}\n\n` +
+      : `# OAuth 安全測試報告\n\n${report.environmentName} · ${report.environment} · ${report.generatedAt}\n\n目標：${currentEnvironment.baseUrl || "isolated fixture"}\n\n${report.limitations.join("\n")}\n\n` +
         report.results
           .map(
             (r) =>
@@ -190,7 +381,7 @@ function exportReport(format) {
   );
   const link = element("a");
   link.href = url;
-  link.download = `oauth-simulation-report.${format === "json" ? "json" : "md"}`;
+  link.download = `oauth-${currentEnvironment.type === "simulation" ? "simulation" : currentEnvironment.id}-report.${format === "json" ? "json" : "md"}`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -199,13 +390,26 @@ $("run").onclick = () => execute(catalog);
 $("cancel").onclick = () => controller?.abort();
 $("export-json").onclick = () => exportReport("json");
 $("export-md").onclick = () => exportReport("md");
+$("environment-select").onchange = () =>
+  selectEnvironment($("environment-select").value).catch(() => {});
+$("environment-new").onclick = () => openEnvironment();
+$("environment-edit").onclick = () => openEnvironment(currentEnvironment);
+$("environment-close").onclick = () => $("environment-dialog").close();
+$("profile-type").onchange = profileFields;
+$("environment-form").onsubmit = (event) => {
+  event.preventDefault();
+  saveEnvironment();
+};
+$("environment-delete").onclick = () => saveEnvironment(true);
 try {
-  const response = await fetch("/api/catalog");
-  if (!response.ok) throw new Error("無法讀取情境");
-  catalog = (await response.json()).catalog;
-  $("catalog-count").textContent = `/ ${catalog.length}`;
-  $("run").disabled = false;
-  render();
+  await refreshEnvironments();
+  let id = "local";
+  try {
+    id = sessionStorage.getItem("oauth-environment-id") || id;
+  } catch {}
+  await selectEnvironment(
+    environments.some((profile) => profile.id === id) ? id : "local",
+  );
 } catch {
-  $("status").textContent = "無法連接執行器，請重新啟動服務。";
+  $("status").textContent = "無法連接執行器或讀取環境設定，請檢查服務。";
 }

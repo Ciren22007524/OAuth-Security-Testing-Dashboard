@@ -46,4 +46,12 @@ AUTH_SERVICE_PATH=/tmp/oauth-auth-service-review npm run test:auth-browser
 
 ## 需要外部設定的部分
 
-Live 模式目前尚未開放。要連 staging，先決定獨立測試 URL、已登記的 client_id／Origin 與隔離身份，再加上明確的主機白名單及流量限制。正式 Google、遠端 D1 與現有用戶 session 不在這兩個指令的操作範圍。
+可用環境管理介面建立自訂 HTTP 目標，執行無 session 的有界檢查。若要做帶 session 的遠端流程，仍需隔離測試身份與 session 設計。正式 Google、遠端 D1 與現有用戶 session 不在這兩個指令的操作範圍。
+
+## HTTP 環境 adapter 驗證
+
+```sh
+AUTH_SERVICE_PATH=/tmp/oauth-auth-service-review npm run test:auth-environments
+```
+
+此指令以真實 Hono 路由建立一次性 loopback HTTP bridge，驗證環境模組的全部 10 個 HTTP 情境，已全部通過。報告根環境為 LOCAL_SOURCE_HTTP；各請求仍保留 CUSTOM_HTTP 目標與設定快照。可用 REPORT_PATH 匯出至新檔案。短期 OAuth 交易隨本機記憶體 fixture 丟棄，不對正式服務、Google 或 D1 發出請求。

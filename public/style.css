@@ -7,6 +7,81 @@
   --muted: #8292a2;
   --green: #69e5bc;
 }
+dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0;
+  width: min(520px, calc(100vw - 28px));
+  max-height: 90vh;
+}
+dialog::backdrop {
+  background: #000a;
+}
+.mode.http {
+  color: #edc777;
+  border-color: #6c5b33;
+  background: #282318;
+}
+.environment-fields {
+  padding: 20px;
+}
+.environment-fields label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+.environment-fields input,
+.environment-fields select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.environment-fields p {
+  font-size: 11px;
+}
+.environment-form-actions,
+.environment-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.environment-form-actions {
+  justify-content: space-between;
+  margin-top: 20px;
+}
+#environment-select {
+  max-width: 260px;
+  margin: 3px 12px 3px 0;
+}
+#environment-target {
+  display: block;
+  font:
+    11px ui-monospace,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.target-bar > div {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .target-bar {
+    flex-wrap: wrap;
+  }
+  #environment-select {
+    max-width: 100%;
+  }
+  .environment-actions {
+    width: 100%;
+  }
+}
 * {
   box-sizing: border-box;
 }

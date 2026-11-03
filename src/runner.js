@@ -185,7 +185,7 @@ export const catalog = [
 
 export function redact(value, key = "") {
   if (
-    /cookie|^authorization$|secret|password|email|^sub$|^(?:(?:access|refresh|id)_)?token$|^(?:d|p|q|dp|dq|qi|k)$/i.test(
+    /cookie|^authorization$|secret|password|email|^sub$|^(?:(?:access|refresh|id)[_-]?)?token$|^jwt$|^(?:d|p|q|dp|dq|qi|k)$/i.test(
       key,
     )
   )
@@ -196,10 +196,15 @@ export function redact(value, key = "") {
       Object.entries(value).map(([k, v]) => [k, redact(v, k)]),
     );
   if (typeof value === "string")
-    return value.replace(
-      /([?&](?:state|code|access_token|refresh_token)=)[^&\s]*/gi,
-      "$1[REDACTED]",
-    );
+    return value
+      .replace(
+        /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
+        "[REDACTED]",
+      )
+      .replace(
+        /([?&](?:state|code|access_token|refresh_token)=)[^&\s]*/gi,
+        "$1[REDACTED]",
+      );
   return value;
 }
 
