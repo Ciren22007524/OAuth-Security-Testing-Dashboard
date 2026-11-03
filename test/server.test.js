@@ -37,6 +37,9 @@ test("dashboard serves assets and runs only same-origin simulation requests", as
     const unknown = await request({ id: "unknown" });
     assert.equal(unknown.status, 400);
     await unknown.text();
+    const fault = await request({ id: "token-origin", fault: "token-origin" });
+    assert.equal(fault.status, 400);
+    await fault.text();
     const run = await request({ id: "rotation" });
     assert.equal(run.status, 200);
     const result = await run.json();

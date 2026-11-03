@@ -33,6 +33,28 @@ test("intentionally vulnerable redirect fixture produces FAIL with evidence", as
   assert.equal(result.evidence[0].response.status, 302);
 });
 
+// Each mutation disables exactly one fixture control, independently of assertions.
+for (const [scenario, fault] of [
+  ["client-invalid", "authorize-client"],
+  ["state-bounds", "state-bounds"],
+  ["callback-state", "callback-cookie"],
+  ["callback-replay", "callback-replay"],
+  ["token-client", "token-client"],
+  ["token-origin", "token-origin"],
+  ["token-session", "token-session"],
+  ["rotation", "duplicate-rotation-cookie"],
+  ["reuse-grace", "reject-grace"],
+  ["reuse-revoke", "reuse-revoke"],
+]) {
+  test(`control regression is detected: ${scenario}`, async () => {
+    const result = await runScenario(scenario, { fault });
+    assert.equal(result.status, "FAIL");
+    assert.ok(result.assertions.some((a) => !a.passed));
+    assert.ok(result.evidence.length > 0);
+    assert.equal(result.cleanup, "complete");
+  });
+}
+
 test("callback transaction expires using injected clock", async () => {
   const fixture = await createFixture();
   try {
@@ -79,7 +101,7 @@ test("nested sensitive data is redacted in reports", () => {
       sub: "private",
       ok: true,
     },
-    path: "/callback?state=private&code=mock-code",
+    path: "/callback?state=private&code=private&access_token=private&refresh_token=private",
   });
   assert.ok(!JSON.stringify(value).includes("private"));
   assert.equal(value.response.ok, true);
