@@ -37,4 +37,11 @@
 
 若要測試真實登入、正式 Google／D1 或帶 session 的撤銷，需要先決定隔離測試身份與 session 注入方式。這不阻擋目前的環境管理與無 session 檢查；不會自動變更正式 CLIENTS。機密不能貼到對話或寫入設定／報告。
 
-GitHub API 網域仍被代理封鎖，無法建立 PR 或確認遠端 CI；Git 推送可用，先前已依使用者合併指示使用一般 merge commit 推送 main。
+GitHub 存取已恢復：可建立 PR 與查看遠端 CI。PR #1 以一般 merge commit 合併進 main（`3b9b99b`），該 commit 的 GitHub Actions CI 通過；先前 `702dad4` 的 CI 失敗即為已修正的 Node 24 jwks 問題。
+
+## 下一步
+
+- CI 改用 `.nvmrc` 作為 Node 版本唯一來源（`actions/setup-node` 的 `node-version-file`），避免 `ci.yml` 寫死 `"24"` 與 `.nvmrc`／`package.json` engines 不同步。已交接給 Codex，見 `docs/handoff.md`。
+- 帶 session 的遠端輪替／撤銷測試：需先決定隔離測試身份與 session 注入方式。
+- TypeScript 型別檢查（例如 JSDoc + `tsc --checkJs`）或 lint。
+- 雲端開發環境預設 Node 為 22；需由使用者在環境 Setup script 將 `/opt/node24/bin` 加到 PATH 前面。
