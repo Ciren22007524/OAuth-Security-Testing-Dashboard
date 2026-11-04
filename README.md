@@ -2,9 +2,19 @@
 
 以可追溯的 HTTP 證據學習與測試 OAuth 協定的本機安全實驗台。介面採繁體中文，包含情境分類、斷言結果、遮罩後的請求／回應、取消執行與 JSON / Markdown 報告。
 
+## 先看介面：Windows 可攜式預覽
+
+在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
+
+這裡的 localhost 是使用者自己電腦上的內建服務，不是雲端工作區。會自動選擇可用埠號；環境設定保存在使用者的 AppData，不會寫進 EXE 或雲端 repo。
+
+![可攜式程式的實際介面預覽](docs/screenshots/portable-ui.png)
+
+截圖來自 Linux 單檔程式的實際瀏覽器驗證。Windows 預覽尚未程式碼簽章；Release 工作流程會在 Windows runner 實際執行獨立 EXE smoke test，通過後才發布。請參閱 [使用說明](docs/WINDOWS-QUICKSTART.txt)，不要把本機打包成功當作 Windows CI 已通過。
+
 ## 啟動
 
-需要 Node.js 24.5 以上；目前無第三方相依套件，無須安裝套件或設定任何憑證。
+從原始碼執行需要 Node.js 24.5 以上；應用執行期只用 Node 內建模組，不需設定憑證。打包開發工具由 `npm ci` 按 lockfile 安裝。
 
 ```sh
 npm start
@@ -22,6 +32,22 @@ npm test
 # 已安裝 Chromium 時，另可驗證完整介面流程
 npm run test:browser
 ```
+
+## 打包單檔執行檔
+
+```sh
+npm ci
+npm run build:portable
+```
+
+在 Windows x64 會產生 EXE；Linux x64 產生 Linux 單檔，亦可用 `npm run build:portable -- --windows` 交叉產生 Windows 預覽檔。打包需下載官方 Node 授權文件；交叉打包另下載同版本 node.exe 並核對官方 SHA-256，保留 TLS 驗證。建置產物在 ignored `dist/`。
+
+```sh
+# 已產生本機平台執行檔後，驗證它在 repo 外啟動、載入介面並執行測試
+npm run test:portable
+```
+
+GitHub 的 `Windows portable release` 工作流程在 tag 推送時執行 Windows 檢查／建置／EXE smoke test，成功後產生預覽 Release。手動執行工作流程僅建置 artifact，不自動發布。桌面入口在 `src/desktop-entry.js`，服務共用 `src/application.js`；原始碼 CLI 仍為 `src/server.js`。
 
 ## 可驗證的範圍
 
