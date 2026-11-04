@@ -34,6 +34,14 @@
         >
       </div>
       <div class="run-toolbar">
+        <label class="mode-picker" for="testing-mode"
+          >模式
+          <select id="testing-mode" disabled>
+            <option value="defense">防禦驗證</option>
+            <option value="attack">攻擊模擬</option>
+          </select></label
+        >
+        <button id="attack-open" hidden>持有的憑證</button>
         <button id="run" class="primary" disabled>執行全部情境</button>
         <button id="cancel" disabled>停止</button>
         <span id="status" role="status">尚未連接測試執行器</span>
@@ -47,8 +55,14 @@
       </div>
       <section class="metrics" aria-label="測試統計">
         <span>已完成 <strong id="total">0</strong></span>
-        <span>通過 <strong id="pass" class="PASS">0</strong></span>
-        <span>未通過 <strong id="fail" class="FAIL">0</strong></span>
+        <span
+          ><span id="pass-label">通過</span>
+          <strong id="pass" class="PASS">0</strong></span
+        >
+        <span
+          ><span id="fail-label">未通過</span>
+          <strong id="fail" class="FAIL">0</strong></span
+        >
         <span>執行錯誤 <strong id="error" class="ERROR">0</strong></span>
         <span>待確認 <strong id="inconclusive">0</strong></span>
       </section>
@@ -90,6 +104,77 @@
         <pre id="console">尚未連接測試執行器。</pre>
       </details>
     </main>
+    <dialog id="attack-dialog" aria-labelledby="attack-title">
+      <form id="attack-form" autocomplete="off">
+        <div class="panel-heading">
+          <h2 id="attack-title">攻擊者持有的憑證</h2>
+          <button id="attack-close" type="button" aria-label="關閉憑證設定">
+            ✕
+          </button>
+        </div>
+        <div class="environment-fields">
+          <p>
+            模擬已取得測試用 client
+            secret。憑證只留在目前分頁，切換環境／離開攻擊模式會清除
+            secret，不會存入設定或報告。
+          </p>
+          <p class="muted">
+            本地模擬可留白，會使用公開的 demo-client／demo-secret。HTTP
+            環境需填寫實際測試憑證。
+          </p>
+          <label
+            >Client ID<input
+              id="attack-client"
+              maxlength="200"
+              autocomplete="off"
+              placeholder="模擬預設 demo-client"
+          /></label>
+          <label
+            >Client secret<input
+              id="attack-secret"
+              type="password"
+              maxlength="2048"
+              autocomplete="new-password"
+              spellcheck="false"
+              placeholder="僅供當次測試使用"
+          /></label>
+          <label
+            >要求的 scope（選填）<input
+              id="attack-scope"
+              maxlength="512"
+              placeholder="例如 read；不保證 provider 支援"
+          /></label>
+          <label
+            >Client 認證方式<select id="attack-auth">
+              <option value="auto">依 OIDC discovery</option>
+              <option value="client_secret_basic">client_secret_basic</option>
+              <option value="client_secret_post">client_secret_post</option>
+            </select></label
+          >
+          <label
+            >Token 路徑（選填）<input
+              id="attack-token-path"
+              maxlength="2048"
+              placeholder="留白讀取 OIDC discovery；或 /oauth/token"
+          /></label>
+          <label
+            >要讀取的資源路徑（選填）<input
+              id="attack-resource-path"
+              maxlength="2048"
+              placeholder="例如 /userinfo 或 /api/profile"
+          /></label>
+          <p class="muted">
+            端點限於目前環境。資源操作最多兩次 GET（未登入對照與帶 token）；OIDC
+            的 /userinfo 通常需要使用者 token，client credentials token
+            不一定可用。
+          </p>
+          <div class="environment-form-actions">
+            <button id="attack-clear" type="button">清除憑證與結果</button
+            ><button class="primary" type="submit">完成</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
     <dialog id="environment-panel" aria-labelledby="environment-panel-title">
       <div class="panel-heading">
         <h2 id="environment-panel-title">測試環境</h2>

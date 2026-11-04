@@ -2,6 +2,15 @@
 
 更新：2026-11-04
 
+## 最新功能：可切換防禦與攻擊模式（2026-11-04）
+
+- 原有防禦模式及 23 個模擬／10 個 HTTP 情境保留，將集中條件鏈拆為獨立 handler 註冊表；模式也以註冊表派送，增加情境不需擴充主條件鏈。
+- 新增持有 client secret 的兩項攻擊者能力模擬：取得 Bearer access token、以未登入對照確認能否讀取指定資源。支援同 origin OIDC discovery、client_secret_basic／post、scope 與 token 路徑設定。
+- 能力結果獨立為 SUCCEEDED／BLOCKED／INCONCLUSIVE／ERROR，不反轉既有 PASS／FAIL；攻擊成功是否構成漏洞仍依 client 授權政策判讀。
+- 臨時 secret 不進環境設定、storage、紀錄或報告；取得的 token 不回傳，不保留資源完整內容。憑證變更清空攻擊結果，離開模式／切換環境清除 secret。
+- 本輪驗證：29 個 JS 模組語法檢查、72 個 Node 測試、完整桌面／筆電／手機 Chromium 流程與 6 項資源檢查通過；file: 渲染因管理政策跳過 1 項。防禦模擬仍為 22 PASS／1 INCONCLUSIVE。
+- 未加入授權碼＋PKCE、使用者憑證與 session 攻擊；未執行正式 OIDC provider 或 Google 登入驗收。完整操作與限制見 `ATTACK_MODE.md`。
+
 ## 目前優先：本機 Web 與介面精簡（2026-11-04）
 
 使用者改採下載原始碼，在自己的電腦啟動 Web 服務；Windows EXE 與雲端部署保留為選用方案，下方歷史優先序不代表目前阻擋項目。

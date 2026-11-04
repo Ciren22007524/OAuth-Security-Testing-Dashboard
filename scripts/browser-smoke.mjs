@@ -510,6 +510,91 @@ try {
     )) !== 1
   )
     throw Error("Profile not deleted");
+  await wait("document.getElementById('environment-panel').open");
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  const defenseTotal = await evaluate(
+    "document.getElementById('total').textContent",
+  );
+  await evaluate(
+    "document.getElementById('testing-mode').value='attack';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    "document.querySelectorAll('.scenario').length===2 && !document.getElementById('run').disabled",
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('total').textContent==='0' && document.getElementById('pass-label').textContent==='操作成功'",
+    ))
+  )
+    throw Error("Attack mode mixed defense results or labels");
+  await evaluate(
+    "document.getElementById('attack-open').click();document.getElementById('attack-client').value='demo-client';document.getElementById('attack-secret').value='demo-secret';document.getElementById('attack-scope').value='read';document.getElementById('attack-secret').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('attack-form').requestSubmit();document.getElementById('run').click()",
+  );
+  await wait(
+    "document.getElementById('total').textContent==='2' && !document.getElementById('run').disabled",
+  );
+  if ((await evaluate("document.getElementById('pass').textContent")) !== "2")
+    throw Error("Attack fixture capabilities not demonstrated");
+  await evaluate(
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+  );
+  let attackReport;
+  for (let i = 0; i < 50; i++) {
+    try {
+      attackReport = JSON.parse(
+        await readFile(
+          join(downloads, "oauth-simulation-attack-report.json"),
+          "utf8",
+        ),
+      );
+      break;
+    } catch {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  if (
+    attackReport?.testingMode !== "attack" ||
+    attackReport.results.length !== 2 ||
+    /demo-secret|demo-access-token/.test(JSON.stringify(attackReport))
+  )
+    throw Error("Attack report leaked credentials or lacked mode");
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 1100,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await evaluate("document.querySelector('.scenario').click()");
+  await writeFile(
+    join(work, "attack-desktop.png"),
+    Buffer.from(
+      (await call("Page.captureScreenshot", { format: "png" })).data,
+      "base64",
+    ),
+  );
+  await evaluate(
+    "document.getElementById('attack-open').click();document.getElementById('attack-secret').value='incorrect-secret';document.getElementById('attack-secret').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('attack-form').requestSubmit()",
+  );
+  if ((await evaluate("document.getElementById('total').textContent")) !== "0")
+    throw Error("Changed attacker credentials retained stale results");
+  await evaluate("document.querySelector('#detail button').click()");
+  await wait(
+    "document.getElementById('fail').textContent==='1' && !document.getElementById('run').disabled",
+  );
+  await evaluate(
+    "document.getElementById('testing-mode').value='defense';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('run').disabled`,
+  );
+  if (
+    !(await evaluate(
+      `document.getElementById('total').textContent===${JSON.stringify(defenseTotal)} && document.getElementById('attack-secret').value===''`,
+    ))
+  )
+    throw Error(
+      "Mode switch did not preserve defense results and clear secret",
+    );
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({
@@ -535,6 +620,7 @@ try {
         "revision invalidates old results",
         "persisted profile and selection",
         "custom report target identity",
+        "attack mode capability outcomes, credential invalidation, redacted report and defense isolation",
       ],
       artifactDirectory: work,
     }),

@@ -2,11 +2,17 @@
 
 ## 自動驗證
 
-使用 `npm test` 執行 Node test runner。情境逐一執行並驗證非空斷言、實際請求預算、清理與遮罩。另以刻意允許錯誤 redirect 的 fixture 驗證測試能產生 FAIL，而非固定顯示成功。
+使用 `npm test` 執行 Node test runner。防禦情境逐一執行並驗證非空斷言、實際請求預算、清理與遮罩。另以刻意允許錯誤 redirect 的 fixture 驗證測試能產生 FAIL，而非固定顯示成功。
 
 測試涵蓋有效授權與 callback 正向流程、錯誤 client、四種 redirect 變體、state 空值／長度、callback cookie 不符／缺少／重播／到期、token Origin、session 缺少／錯誤／到期、並行 rotation、30,000ms 寬限與 30,001ms 撤銷、ES256 payload／signature／issuer／audience／expiration。亦驗證取消、未知情境、報告遮罩與控制 API 的跨 Origin／外部 target 拒絕。
 
 HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets、catalog 並透過 API 執行情境；不僅檢查 port 或 PID。
+
+## 攻擊模式驗證
+
+`test/attack.test.js` 驗證本地與真實 loopback HTTP target 的 discovery、Basic／POST client 認證、token 交換及資源讀取。包括公開資源對照、OAuth 拒絕與不明回應分類、跨 origin endpoint 與重新導向不轉送憑證、反射 secret／token／Cookie 不出現在證據、請求上限、限流、取消與環境檔不保存憑證。另檢查防禦 catalog 的每項情境均有明確註冊 handler。
+
+Chromium 流程涵蓋模式切換、操作成功／被阻擋標示、憑證變更清空舊結果、攻擊報告遮罩、離開模式清除 secret，以及原有防禦結果隔離。正式 OIDC provider、Google 登入與完整 OIDC conformance 尚未驗證。
 
 ## 手動介面驗證
 

@@ -511,3 +511,17 @@ dialog::backdrop {
     padding: 18px;
   }
 }
+
+.mode-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.SUCCEEDED,
+.result-badge.SUCCEEDED {
+  color: #f5b86a;
+}
+.BLOCKED,
+.result-badge.BLOCKED {
+  color: #93c5fd;
+}
