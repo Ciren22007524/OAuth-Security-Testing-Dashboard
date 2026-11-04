@@ -35,6 +35,10 @@ npm run test:browser
 
 ![本機 Web 介面](docs/screenshots/web-ui.png)
 
+## array-test 整合驗收
+
+目前通用情境尚未適配 array-test 的真實登入／API 契約，不能將本機 fixture 測試當成 demo 驗收完成。下一階段以「分清應用／身分服務／API → 建立正常登入與受保護資料對照 → 逐項攻擊 → 證據與報告」落實，流程、現有差距與驗收清單見 [整合驗測流程](docs/ACCEPTANCE_FLOW.md)。
+
 ## 防禦驗證與攻擊模擬
 
 保留原有防禦驗證，透過「模式」切換攻擊者視角。攻擊模式有 10 個可執行情境，涵蓋 client secret、access token、refresh token、授權碼重播與 PKCE。**環境只選目標，參數在各情境右側表單獨立填寫**；不共用憑證，也不自動沿用環境的 client ID。
