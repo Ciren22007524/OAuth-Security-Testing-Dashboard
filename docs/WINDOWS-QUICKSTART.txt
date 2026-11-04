@@ -1,0 +1,24 @@
+OAuth Lab — Windows x64 portable preview
+
+1. Download and extract OAuthSecurityLab-windows-x64.zip.
+2. Double-click OAuthSecurityLab-windows-x64.exe.
+3. The app starts its embedded local service and opens your default browser.
+   You do not need to install Node.js or run npm commands.
+4. Keep the application window open while using the dashboard.
+   Closing that window stops the service.
+
+No cloud deployment is needed to preview the interface this way.
+The browser address uses a free loopback port on YOUR computer.
+If browser opening fails, copy the address shown in the application window.
+
+Environment settings are saved under:
+  %LOCALAPPDATA%\OAuthSecurityLab\environments.json
+Do not run multiple copies against the same settings file.
+
+The preview is not code-signed. SHA-256 files accompany the downloads.
+The default environment runs isolated simulations, not production tests.
+Custom HTTP targets still need to be authorized and reachable from your PC.
+Real Google login and remote D1/session operations are not validated here.
+
+Licenses: APP-LICENSE.txt and NODE-LICENSE.txt.
+The executable can also print bundled licenses with --licenses.

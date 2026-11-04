@@ -29,6 +29,7 @@ redirect／state 檢查先用已登記的合法設定建立短期 OAuth 交易�
 ## 設定與結果保存
 
 - 最多 100 個自訂環境，預設存於 `.local/environments.json`，已加入 `.gitignore`。原子替換寫入，檔案權限 0600。
+- 上述路徑是原始碼 CLI 的預設。可攜式 Windows EXE 改存 `%LOCALAPPDATA%\OAuthSecurityLab\environments.json`；POSIX 系統以 0600 寫入，Windows 使用使用者 AppData 的繼承 ACL，不宣稱 POSIX mode 等同 Windows 權限。
 - 可用 `DASHBOARD_ENVIRONMENTS_FILE` 指定其他設定檔。重啟讀取同一檔案即可保留環境；請自行備份此非機密檔案。
 - 同一個 Dashboard 實例共用設定，目前不提供帳號權限隔離；不要讓多個行程共用同一檔案。
 - 設定有版本號；過期的修改、刪除或執行請求回 409，避免測到與畫面不同的目標。
