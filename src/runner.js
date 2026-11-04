@@ -467,10 +467,11 @@ export async function runScenario(
         const parts = fixture.issueJwt().split(".");
         const header = JSON.parse(Buffer.from(parts[0], "base64url"));
         const key = keys.find((key) => key.kid === header.kid);
-        assert(
-          "kid / alg 與公開金鑰可驗證實際 fixture JWT",
-          header.alg === "ES256" &&
-            key &&
+        let jwtVerified = false;
+        try {
+          jwtVerified =
+            header.alg === "ES256" &&
+            Boolean(key) &&
             verify(
               "sha256",
               Buffer.from(parts.slice(0, 2).join(".")),
@@ -479,8 +480,13 @@ export async function runScenario(
                 dsaEncoding: "ieee-p1363",
               },
               Buffer.from(parts[2], "base64url"),
-            ),
-        );
+            );
+        } catch {
+          // 公鑰無法解析或簽章驗證拋錯（例如 fault 注入私鑰材料使 Node
+          // 拒絕建立公鑰）視為此斷言失敗，而非讓整個情境變成 ERROR。
+          jwtVerified = false;
+        }
+        assert("kid / alg 與公開金鑰可驗證實際 fixture JWT", jwtVerified);
       } else if (id === "discovery") {
         const response = await request("/.well-known/openid-configuration");
         const metadata = response.body;
