@@ -10,6 +10,10 @@
 npm start
 ```
 
+請在瀏覽器輸入啟動訊息中的本機位址（預設 `http://localhost:3000`）。**不要直接雙擊 `public/index.html` 來執行測試**：HTML 只是前端入口，測試與環境設定需要 Node API。直接開檔僅可預覽樣式，會顯示尚未連接執行器；靜態主機也不會提供測試 API。
+
+CSS、JavaScript 與 API 使用相對路徑；若部署在子路徑，反向代理需將該前綴下的資源與 API 一起轉送 Node 服務，並保留對外 Host／Origin 的一致性。
+
 服務只綁定 loopback，預設埠號 3000，可用 `PORT=3001 npm start` 調整。預設使用本機模擬器；使用者可自行新增、管理及切換多個 HTTP 或模擬環境，詳見 [環境管理](docs/ENVIRONMENTS.md)。儲存 HTTP 環境不會立即連線，執行時才測試所選目標。雲端 onboarding 不提供 localhost 預覽連結；可透過本機 HTTP 請求驗證服務。
 
 ```sh
