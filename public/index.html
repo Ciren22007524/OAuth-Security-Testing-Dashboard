@@ -10,26 +10,56 @@
   <body>
     <aside>
       <a class="brand" href="/"
-        >◈ <span>OAuth<span class="muted"> / LAB</span></span></a
+        ><span class="brand-mark">◈</span
+        ><span>OAuth <b>Lab</b><small>SECURITY WORKSPACE</small></span></a
       >
-      <div class="nav-label">WORKSPACE</div>
-      <div class="nav-active">▦　安全測試台</div>
+      <div class="nav-label">工作空間</div>
+      <nav aria-label="工作區導覽">
+        <a class="nav-item nav-active" href="#workspace"
+          ><span>▦</span> 測試工作台 <i>01</i></a
+        >
+        <a class="nav-item" href="#environment-settings"
+          ><span>◎</span> 環境設定</a
+        >
+        <a class="nav-item" href="#execution-log"><span>›_</span> 執行紀錄</a>
+      </nav>
       <div class="aside-note">
-        PROTOCOL EXPLORER<br /><span>OAuth 2.0 · Session · JWT</span>
+        <span class="label">你的測試流程</span>
+        <ol>
+          <li>選擇目標環境</li>
+          <li>執行安全情境</li>
+          <li>檢視證據與報告</li>
+        </ol>
       </div>
-      <div class="connection"><span class="dot"></span> 環境測試執行器</div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-shield">◇</div>
+        <strong>每個結論，都有依據。</strong>
+        <p>依環境保存結果，讓安全驗證<br />清楚、可重現、可追溯。</p>
+        <div class="connection"><span class="dot"></span> 本機工作空間</div>
+      </div>
     </aside>
     <main>
+      <div class="topbar">
+        <span>工作空間 <b>/</b> <strong>安全測試台</strong></span
+        ><span class="runner-indicator"
+          ><i class="dot"></i><span id="runner-status">CONNECTING</span></span
+        >
+      </div>
       <header>
         <div>
-          <span class="eyebrow">SECURITY TESTING / OVERVIEW</span>
-          <h1>OAuth 安全測試台<span class="cursor">_</span></h1>
-          <p>用可追溯的證據，驗證每一道安全邊界。</p>
+          <span class="eyebrow">TEST. INSPECT. UNDERSTAND.</span>
+          <h1>驗證每一道信任邊界<span class="cursor">.</span></h1>
+          <p>從協定到 Session，以真實請求與斷言，掌握每一次安全驗證。</p>
         </div>
         <span id="environment-mode" class="mode">● SIMULATION</span>
       </header>
-      <section class="target-bar">
-        <div>
+      <section
+        class="target-bar"
+        id="environment-settings"
+        aria-label="目標環境"
+      >
+        <div class="target-icon" aria-hidden="true">◎</div>
+        <div class="target-identity">
           <label class="label" for="environment-select"
             >TARGET ENVIRONMENT</label
           >
@@ -40,6 +70,7 @@
           ></select>
           <span id="environment-target" class="muted">隔離協定模擬器</span>
         </div>
+        <span id="environment-count" class="tag">環境設定</span>
         <div class="environment-actions">
           <button id="environment-new" disabled>＋ 新增環境</button
           ><button id="environment-edit" disabled>管理</button>
@@ -50,27 +81,46 @@
         正式環境安全；Google 登入、D1 與瀏覽器 CORS 尚未驗證。
       </div>
       <section class="metrics" aria-label="測試統計">
-        <div>
-          <span>已完成測試</span><strong id="total">0</strong
-          ><small>本次工作階段</small>
+        <div class="metric metric-total">
+          <span class="metric-icon" aria-hidden="true">▤</span
+          ><span>已完成測試</span><strong id="total">0</strong
+          ><small>目前環境的執行結果</small>
         </div>
-        <div>
-          <span>通過</span><strong id="pass" class="green">0</strong
-          ><small>所有斷言成立</small>
+        <div class="metric metric-pass">
+          <span class="metric-icon" aria-hidden="true">✓</span
+          ><span>通過驗證</span><strong id="pass" class="green">0</strong
+          ><small>所有預期斷言皆成立</small>
         </div>
-        <div>
-          <span>失敗 / 錯誤</span><strong id="fail">0</strong
-          ><small>需要檢查證據</small>
+        <div class="metric metric-fail">
+          <span class="metric-icon" aria-hidden="true">!</span
+          ><span>失敗 / 錯誤</span><strong id="fail">0</strong
+          ><small>檢視回應與失敗原因</small>
         </div>
-        <div>
-          <span>待確認</span><strong id="inconclusive">0</strong
-          ><small>缺少驗證前提</small>
+        <div class="metric metric-pending">
+          <span class="metric-icon" aria-hidden="true">?</span
+          ><span>待確認</span><strong id="inconclusive">0</strong
+          ><small>尚需補齊測試前提</small>
         </div>
       </section>
-      <section class="workspace">
-        <div class="panel">
+      <div class="workspace-heading">
+        <div>
+          <span class="eyebrow">TEST EXPLORER</span>
+          <h2>探索測試情境</h2>
+        </div>
+        <div class="coverage">
+          <span id="coverage-label">尚未執行</span
+          ><progress
+            id="coverage-progress"
+            value="0"
+            max="23"
+            aria-label="情境執行進度"
+          ></progress>
+        </div>
+      </div>
+      <section class="workspace" id="workspace">
+        <div class="panel catalog-panel">
           <div class="panel-heading">
-            <h2>測試情境 <span id="catalog-count" class="muted"></span></h2>
+            <h2>情境清單 <span id="catalog-count" class="muted"></span></h2>
             <select id="filter" aria-label="情境分類">
               <option value="all">所有分類</option>
               <option>OAuth</option>
@@ -80,12 +130,25 @@
               <option>Service</option>
             </select>
           </div>
+          <div class="catalog-toolbar">
+            <label class="search-box"
+              ><span aria-hidden="true">⌕</span
+              ><input
+                id="scenario-search"
+                type="search"
+                placeholder="搜尋情境、協定或關鍵字…"
+                aria-label="搜尋測試情境" /></label
+            ><span id="visible-count"></span>
+          </div>
           <div id="catalog"></div>
+          <div class="catalog-footnote">
+            <span class="dot"></span> 依目前環境載入可執行的情境
+          </div>
         </div>
         <div class="panel detail">
           <div class="panel-heading">
-            <h2>檢查詳情</h2>
-            <span class="tag">EVIDENCE FIRST</span>
+            <h2>情境與證據</h2>
+            <span class="tag">EVIDENCE FIRST ↗</span>
           </div>
           <div id="detail">
             <div class="empty">
@@ -96,7 +159,7 @@
           </div>
         </div>
       </section>
-      <section class="panel terminal">
+      <section class="panel terminal" id="execution-log">
         <div class="panel-heading">
           <h2><span class="green">›_</span> 執行紀錄</h2>
           <span class="muted">IN-MEMORY ONLY</span>
