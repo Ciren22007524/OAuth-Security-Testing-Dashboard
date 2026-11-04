@@ -1,12 +1,14 @@
 {
   "name": "oauth-security-testing-dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24.5.0"
   },
   "scripts": {
+    "build:portable": "node --use-env-proxy scripts/build-portable.mjs",
+    "test:portable": "node scripts/portable-smoke.mjs",
     "start": "node --use-env-proxy src/server.js",
     "test": "node --test",
     "test:browser": "node scripts/browser-smoke.mjs",
@@ -15,5 +17,9 @@
     "test:auth-browser": "node scripts/auth-service-browser.mjs",
     "test:auth-environments": "node scripts/auth-service-environments.mjs",
     "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "postject": "1.0.0-alpha.6"
   }
 }

@@ -64,7 +64,9 @@ test("profiles persist across restarts with revisions and isolated deletion", as
     await store.remove(two.id, 1);
     assert.equal((await store.list()).length, 2);
     assert.equal((await store.get(one.id)).name, "Updated");
-    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    if (process.platform !== "win32")
+      assert.equal((await stat(file)).mode & 0o777, 0o600);
+    else assert.ok((await stat(file)).isFile()); // Windows inherits the user's AppData ACL; POSIX mode bits do not describe it.
     assert.equal(JSON.parse(await readFile(file, "utf8")).schemaVersion, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
