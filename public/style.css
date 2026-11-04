@@ -349,6 +349,58 @@ dialog::backdrop {
   margin-right: auto;
   color: #fda4af;
 }
+.environment-switcher {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  max-width: 65%;
+  min-width: 0;
+}
+.switcher-text {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+}
+#environment-name,
+#environment-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#environment-summary {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+#environment-panel {
+  width: min(680px, calc(100% - 28px));
+}
+.environment-panel-content {
+  padding: 0 20px 8px;
+}
+.environment-panel-content .target-bar {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.environment-panel-content .target-url {
+  flex-basis: 100%;
+  margin: 0;
+}
+.environment-panel-content .notice {
+  margin: 16px 0;
+}
+@media (max-width: 760px) {
+  .environment-switcher {
+    max-width: 100%;
+    width: 100%;
+  }
+  .switcher-text {
+    flex: 1;
+  }
+}
 /* Each desktop column owns one scroll area; evidence flows with the detail. */
 @media (min-width: 761px) {
   body {

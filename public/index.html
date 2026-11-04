@@ -11,6 +11,19 @@
     <main>
       <header>
         <h1>OAuth 測試工作台</h1>
+        <button
+          id="environment-open"
+          class="environment-switcher"
+          aria-haspopup="dialog"
+          aria-controls="environment-panel"
+          disabled
+        >
+          <span class="switcher-text"
+            ><small>測試環境</small><strong id="environment-name">載入中</strong
+            ><span id="environment-summary" class="muted"></span
+          ></span>
+          <span aria-hidden="true">⌄</span>
+        </button>
         <span id="runner-status">NOT CONNECTED</span>
       </header>
       <div id="startup-help" class="startup-help" role="status">
@@ -20,19 +33,6 @@
           >此儀表板需要啟用 JavaScript。</noscript
         >
       </div>
-      <section
-        class="target-bar"
-        id="environment-settings"
-        aria-label="目標環境"
-      >
-        <label for="environment-select">測試環境</label>
-        <select id="environment-select" disabled></select>
-        <span id="environment-mode" class="muted"></span>
-        <button id="environment-new" disabled>新增環境</button>
-        <button id="environment-edit" disabled>編輯</button>
-        <span id="environment-target" class="target-url muted"></span>
-      </section>
-      <p id="environment-notice" class="notice">載入環境後即可選擇測試情境。</p>
       <div class="run-toolbar">
         <button id="run" class="primary" disabled>執行全部情境</button>
         <button id="cancel" disabled>停止</button>
@@ -90,6 +90,37 @@
         <pre id="console">尚未連接測試執行器。</pre>
       </details>
     </main>
+    <dialog id="environment-panel" aria-labelledby="environment-panel-title">
+      <div class="panel-heading">
+        <h2 id="environment-panel-title">測試環境</h2>
+        <button id="environment-panel-close" aria-label="關閉環境面板">
+          ✕
+        </button>
+      </div>
+      <div class="environment-panel-content">
+        <section
+          class="target-bar"
+          id="environment-settings"
+          aria-label="目標環境"
+        >
+          <label for="environment-select">測試環境</label>
+          <select id="environment-select" disabled></select>
+          <span id="environment-mode" class="muted"></span>
+          <button id="environment-new" disabled>新增環境</button>
+          <button id="environment-edit" disabled>編輯</button>
+          <span id="environment-target" class="target-url muted"></span>
+        </section>
+        <p id="environment-notice" class="notice">
+          載入環境後即可選擇測試情境。
+        </p>
+        <p class="muted">
+          切換或儲存環境不會送出測試請求。按下執行後，才會測試所選目標。
+        </p>
+        <div class="environment-form-actions">
+          <button id="environment-panel-done" class="primary">完成</button>
+        </div>
+      </div>
+    </dialog>
     <dialog id="environment-dialog" aria-labelledby="environment-dialog-title">
       <form id="environment-form">
         <div class="panel-heading">
