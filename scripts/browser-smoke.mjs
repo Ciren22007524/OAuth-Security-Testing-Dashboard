@@ -124,6 +124,69 @@ try {
       "document.getElementById('catalog').scrollTop=0;window.scrollTo(0,0)",
     );
   }
+  async function checkResponseScrolling() {
+    // A long response must use the detail column's scroll area, never a nested pre.
+    await evaluate(String.raw`(() => {
+      const pre = document.querySelector('.evidence-item pre');
+      pre.dataset.original = pre.textContent;
+      pre.textContent += '\n' + 'long-response-line '.repeat(30).concat('\n').repeat(100);
+      document.querySelector('.detail').scrollTop = 0;
+    })()`);
+    const layout = await evaluate(`(() => {
+      const panel = document.querySelector('.detail');
+      const pre = document.querySelector('.evidence-item pre');
+      panel.scrollTop = pre.offsetTop;
+      const rect = panel.getBoundingClientRect();
+      return {x:rect.left+80, y:rect.top+rect.height/2, top:panel.scrollTop, catalog:document.getElementById('catalog').scrollTop,
+        fits:document.documentElement.scrollHeight<=innerHeight && rect.bottom<=innerHeight,
+        nested:getComputedStyle(pre).overflowY};
+    })()`);
+    if (!layout.fits || layout.nested !== "visible")
+      throw Error("Response layout has page or nested scrolling");
+    await call("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: layout.x,
+      y: layout.y,
+      deltaX: 0,
+      deltaY: 300,
+    });
+    await wait(`document.querySelector('.detail').scrollTop>${layout.top}`);
+    if (
+      await evaluate(
+        `scrollY!==0 || document.getElementById('catalog').scrollTop!==${layout.catalog}`,
+      )
+    )
+      throw Error("Response wheel moved page or catalog");
+    await evaluate(
+      "document.querySelector('.detail').scrollTop=document.querySelector('.detail').scrollHeight",
+    );
+    await call("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: layout.x,
+      y: layout.y,
+      deltaX: 0,
+      deltaY: 300,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await evaluate("scrollY!==0"))
+      throw Error("Response boundary scrolled page");
+    await evaluate(`(() => {
+      const pre = document.querySelector('.evidence-item pre');
+      pre.textContent = pre.dataset.original;
+      delete pre.dataset.original;
+      document.querySelector('.detail').scrollTop = 0;
+      document.getElementById('execution-log').open = true;
+    })()`);
+    if (await evaluate("document.documentElement.scrollHeight>innerHeight"))
+      throw Error("Execution log pushed workspace outside viewport");
+    await evaluate("document.getElementById('execution-log').open=false");
+    await evaluate(
+      "document.querySelector('.detail').scrollTop=document.querySelector('.detail').scrollHeight;document.querySelectorAll('.scenario')[1].click()",
+    );
+    if (await evaluate("document.querySelector('.detail').scrollTop!==0"))
+      throw Error("New scenario retained old response scroll position");
+    await evaluate("document.querySelector('.scenario').click()");
+  }
   await call("Runtime.enable");
   await call("Page.enable");
   await call("Browser.setDownloadBehavior", {
@@ -237,6 +300,21 @@ try {
   if (await evaluate("document.querySelector('.evidence-item').open"))
     throw Error("Evidence did not collapse");
   await evaluate("document.querySelector('.evidence-item summary').click()");
+  await checkResponseScrolling();
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1280,
+    height: 720,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await checkCatalogScrolling();
+  await checkResponseScrolling();
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 1100,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
   await writeFile(
     join(work, "desktop.png"),
     Buffer.from(
@@ -396,6 +474,7 @@ try {
         "reload clears state",
         "mobile overflow",
         "desktop/mobile catalog wheel scroll and boundary containment",
+        "long response uses detail scroll without nested or page scrolling at desktop and laptop sizes",
         "no browser exceptions",
         "create/edit/delete environment",
         "custom HTTP execution",
