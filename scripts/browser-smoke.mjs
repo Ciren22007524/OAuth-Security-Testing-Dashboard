@@ -187,6 +187,44 @@ try {
       throw Error("New scenario retained old response scroll position");
     await evaluate("document.querySelector('.scenario').click()");
   }
+  async function checkEnvironmentPanel() {
+    const height = await evaluate(
+      "document.getElementById('workspace').clientHeight",
+    );
+    await evaluate(
+      "document.getElementById('environment-open').focus();document.getElementById('environment-open').click()",
+    );
+    await wait("document.getElementById('environment-panel').open");
+    if (
+      !(await evaluate(
+        `document.getElementById('workspace').clientHeight===${height} && document.getElementById('environment-select').getBoundingClientRect().height>0 && document.getElementById('environment-name').textContent==='本地模擬'`,
+      ))
+    )
+      throw Error(
+        "Environment overlay changed workspace or summary is missing",
+      );
+    if (
+      await evaluate(
+        "document.documentElement.scrollWidth>innerWidth || document.getElementById('environment-panel').scrollWidth>document.getElementById('environment-panel').clientWidth",
+      )
+    )
+      throw Error("Environment panel overflow");
+    await call("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+    });
+    await call("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+    });
+    await wait("!document.getElementById('environment-panel').open");
+    if (!(await evaluate("document.activeElement.id==='environment-open'")))
+      throw Error("Environment panel did not restore header focus");
+  }
   await call("Runtime.enable");
   await call("Page.enable");
   await call("Browser.setDownloadBehavior", {
@@ -209,6 +247,7 @@ try {
     ))
   )
     throw Error("Initial selection or secondary controls incorrect");
+  await checkEnvironmentPanel();
   await checkCatalogScrolling();
   await evaluate(
     "document.getElementById('scenario-search').value='callback';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
@@ -307,6 +346,7 @@ try {
     deviceScaleFactor: 1,
     mobile: false,
   });
+  await checkEnvironmentPanel();
   await checkCatalogScrolling();
   await checkResponseScrolling();
   await call("Emulation.setDeviceMetricsOverride", {
@@ -330,6 +370,7 @@ try {
   });
   if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
     throw Error("Mobile overflow");
+  await checkEnvironmentPanel();
   await checkCatalogScrolling();
   await writeFile(
     join(work, "mobile.png"),
@@ -361,18 +402,27 @@ try {
   await wait(
     "document.getElementById('total').textContent==='1' && !document.getElementById('run').disabled",
   );
-  await evaluate("document.getElementById('environment-new').click()");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
   await evaluate(
     `document.getElementById('profile-name').value='My QA target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('environment-form').requestSubmit()`,
   );
   await wait(
-    "!document.getElementById('environment-dialog').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
   );
   if ((await evaluate("document.getElementById('total').textContent")) !== "0")
     throw Error("Mixed environment results");
   const customId = await evaluate(
     "document.getElementById('environment-select').value",
   );
+  if (
+    !(await evaluate(
+      `document.getElementById('environment-name').textContent==='My QA target' && document.getElementById('environment-summary').textContent===${JSON.stringify(httpTarget.url)}`,
+    ))
+  )
+    throw Error("Header target summary not updated");
+  await evaluate("document.getElementById('environment-panel-done').click()");
   await evaluate(
     "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
   );
@@ -380,7 +430,7 @@ try {
     "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
   );
   await evaluate(
-    "document.getElementById('environment-select').value='local';document.getElementById('environment-select').dispatchEvent(new Event('change'))",
+    "document.getElementById('environment-open').click();document.getElementById('environment-select').value='local';document.getElementById('environment-select').dispatchEvent(new Event('change'))",
   );
   await wait(
     `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('environment-select').disabled`,
@@ -438,7 +488,9 @@ try {
     customReport.results[0].target !== httpTarget.url
   )
     throw Error("Incorrect custom export target");
-  await evaluate("document.getElementById('environment-edit').click()");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-edit').click()",
+  );
   if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
     throw Error("Mobile environment form overflow");
   await writeFile(
@@ -477,6 +529,7 @@ try {
         "long response uses detail scroll without nested or page scrolling at desktop and laptop sizes",
         "no browser exceptions",
         "create/edit/delete environment",
+        "compact environment header, modal focus and Escape, mobile overlay and target summary",
         "custom HTTP execution",
         "environment result isolation",
         "revision invalidates old results",

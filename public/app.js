@@ -9,6 +9,7 @@ let editingEnvironment;
 const mode = () =>
   currentEnvironment?.type === "http" ? "CUSTOM_HTTP" : "SIMULATION";
 function environmentControls() {
+  $("environment-open").disabled = !currentEnvironment || loadingEnvironment;
   $("environment-edit").hidden =
     !currentEnvironment || currentEnvironment.builtin;
   $("environment-select").disabled = running || loadingEnvironment;
@@ -74,7 +75,13 @@ async function selectEnvironment(id) {
       "http",
       currentEnvironment.type === "http",
     );
-    $("environment-target").textContent = currentEnvironment.baseUrl || "";
+    $("environment-name").textContent = currentEnvironment.name;
+    $("environment-summary").textContent =
+      currentEnvironment.baseUrl || "隔離模擬 · 不連線外部服務";
+    $("environment-open").title =
+      `${currentEnvironment.name} · ${$("environment-summary").textContent}`;
+    $("environment-target").textContent =
+      currentEnvironment.baseUrl || "程式內建模擬器";
     $("environment-notice").textContent =
       currentEnvironment.type === "http"
         ? "只檢查公開端點與未登入請求；缺少必要設定的情境會標為待確認。"
@@ -106,6 +113,7 @@ function profileFields() {
     input.disabled = !http;
 }
 function openEnvironment(profile) {
+  $("environment-panel").close();
   editingEnvironment = profile;
   $("environment-dialog-title").textContent = profile ? "管理環境" : "新增環境";
   $("profile-name").value = profile?.name || "";
@@ -463,6 +471,12 @@ document.addEventListener("keydown", (event) => {
 });
 $("environment-select").onchange = () =>
   selectEnvironment($("environment-select").value).catch(() => {});
+$("environment-open").onclick = () => $("environment-panel").showModal();
+$("environment-panel-close").onclick = $("environment-panel-done").onclick =
+  () => $("environment-panel").close();
+$("environment-dialog").addEventListener("close", () =>
+  $("environment-panel").showModal(),
+);
 $("environment-new").onclick = () => openEnvironment();
 $("environment-edit").onclick = () => openEnvironment(currentEnvironment);
 $("environment-close").onclick = () => $("environment-dialog").close();
