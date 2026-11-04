@@ -141,6 +141,7 @@ export function dashboardServer({
       }
       const assets = {
         "/": ["index.html", "text/html; charset=utf-8"],
+        "/index.html": ["index.html", "text/html; charset=utf-8"],
         "/app.js": ["app.js", "text/javascript; charset=utf-8"],
         "/style.css": ["style.css", "text/css; charset=utf-8"],
       };
@@ -171,7 +172,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("Invalid PORT");
   dashboardServer().listen(port, "127.0.0.1", () =>
     console.log(
-      `Dashboard listening on loopback port ${port} (environment profiles enabled)`,
+      `OAuth Lab 已啟動：http://localhost:${port}\n請透過此服務開啟儀表板，不要直接開啟 public/index.html。`,
     ),
   );
 }

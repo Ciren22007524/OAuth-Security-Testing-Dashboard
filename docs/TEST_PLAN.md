@@ -10,6 +10,8 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 ## 手動介面驗證
 
+執行 `npm run test:resources` 補驗根路徑之外的載入方式：相對 CSS／JS 檔案引用、只有靜態檔而無 API 的明確 OFFLINE 提示、`/lab/index.html` 反向代理子路徑的資源與實際 rotation 執行，以及 Node `/index.html` 入口。這 6 個檢查通過；受管理 Chromium 禁止 file: 網址，因此直接開檔渲染列為 1 個跳過，不聲稱已在此瀏覽器完整驗證。
+
 已安裝 Chromium 時執行 `npm run test:browser`（預設 `/usr/bin/chromium`，可用 `CHROMIUM_PATH` 覆寫）。此測試使用 Chromium DevTools Protocol，不安裝外部套件；在一次性 profile 中檢查關鍵字搜尋與空結果、分類、證據展開／收合、單次／全部執行、兩種報告下載、取消、刷新清除結果、手機無水平溢出及瀏覽器例外。執行後輸出的暫存目錄保留畫面與下載報告。容器中使用 `--no-sandbox`，僅瀏覽這次測試的 loopback 儀表板；不能將此測試用於任意外部頁面。
 
 啟動 `npm start`，檢查分類、單一／全部執行、停止、選擇歷史結果、統計與 JSON / Markdown 下載。下載內容應有環境、時間、情境版本、請求證據、斷言、清理與限制。刷新頁面應清除結果，不應在 browser storage 保存 token。未安裝瀏覽器自動化時，不得宣稱已驗證互動或畫面呈現。
