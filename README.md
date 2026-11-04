@@ -2,21 +2,15 @@
 
 以可追溯的 HTTP 證據學習與測試 OAuth 協定的本機安全實驗台。介面採繁體中文，包含情境分類、斷言結果、遮罩後的請求／回應、取消執行與 JSON / Markdown 報告。
 
-## 先看介面：Windows 可攜式預覽
-
-在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
-
-這裡的 localhost 是使用者自己電腦上的內建服務，不是雲端工作區。會自動選擇可用埠號；環境設定保存在使用者的 AppData，不會寫進 EXE 或雲端 repo。
-
-![可攜式程式的實際介面預覽](docs/screenshots/portable-ui.png)
-
-截圖來自 Linux 單檔程式的實際瀏覽器驗證。Windows 預覽尚未程式碼簽章；Release 工作流程會在 Windows runner 實際執行獨立 EXE smoke test，通過後才發布。請參閱 [使用說明](docs/WINDOWS-QUICKSTART.txt)，不要把本機打包成功當作 Windows CI 已通過。
-
 ## 啟動
+
+目前以下載原始碼、在自己的電腦啟動 Web 服務為主，方便直接修改 `public/` 的畫面。
 
 從原始碼執行需要 Node.js 24.5 以上；應用執行期只用 Node 內建模組，不需設定憑證。打包開發工具由 `npm ci` 按 lockfile 安裝。
 
 ```sh
+git clone https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard.git
+cd OAuth-Security-Testing-Dashboard
 npm start
 ```
 
@@ -32,6 +26,24 @@ npm test
 # 已安裝 Chromium 時，另可驗證完整介面流程
 npm run test:browser
 ```
+
+## 目前介面
+
+選擇環境後，可搜尋／篩選情境，執行單項或全部測試，直接查看斷言及 HTTP 證據。執行紀錄、測試前提與報告匯出收在展開操作中；「未通過」與「執行錯誤」分開統計。結果只保留在目前頁面，重新整理會清空。
+
+![本機 Web 介面](docs/screenshots/web-ui.png)
+
+## 選用：Windows 可攜式預覽
+
+在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
+
+這裡的 localhost 是使用者自己電腦上的內建服務，不是雲端工作區。會自動選擇可用埠號；環境設定保存在使用者的 AppData，不會寫進 EXE 或雲端 repo。
+
+舊版可攜式預覽截圖：
+
+![舊版可攜式程式介面](docs/screenshots/portable-ui.png)
+
+截圖來自 Linux 單檔程式的實際瀏覽器驗證。Windows 預覽尚未程式碼簽章；Release 工作流程會在 Windows runner 實際執行獨立 EXE smoke test，通過後才發布。請參閱 [使用說明](docs/WINDOWS-QUICKSTART.txt)，不要把本機打包成功當作 Windows CI 已通過。
 
 ## 打包單檔執行檔
 
