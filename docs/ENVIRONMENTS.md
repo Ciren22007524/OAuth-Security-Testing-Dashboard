@@ -20,7 +20,7 @@
 | 隔離模擬器 | 23 個本機 fixture 情境，含輪替、登出、撤銷與注入時鐘 | SIMULATION  |
 | HTTP 服務  | 10 個針對所選目標的公開及無 session 檢查             | CUSTOM_HTTP |
 
-HTTP 情境適用於 auth-service 相容端點：`/health`、`/jwks`、`/.well-known/openid-configuration`、`/authorize` 與 `/token`。測試健康、公開金鑰、discovery、未知 client、redirect／state、Origin、缺少 session 與錯誤回應標頭。它不攜帶 cookie／token，不執行真實登入、logout 或 session 撤銷。
+防禦驗證模式的 HTTP 情境適用於 auth-service 相容端點：`/health`、`/jwks`、`/.well-known/openid-configuration`、`/authorize` 與 `/token`。測試健康、公開金鑰、discovery、未知 client、redirect／state、Origin、缺少 session 與錯誤回應標頭。它不攜帶 cookie／token，不執行真實登入、logout 或 session 撤銷。
 
 redirect／state 檢查先用已登記的合法設定建立短期 OAuth 交易，再做負向對照；不跟隨供應商重新導向，也不保留 cookie。該交易由目標既有期限機制清理，報告記錄 `cleanup: server-expiry`。合法設定無法建立交易時為 INCONCLUSIVE，不會因未知 client 回 400 就誤判控制通過。
 
@@ -57,3 +57,7 @@ redirect／state 檢查先用已登記的合法設定建立短期 OAuth 交易�
 | POST `/api/run`                      | body 包含 id、environmentId、environmentRevision        |
 
 寫入／執行 API 要求與 Dashboard 同來源的 Origin 及 JSON Content-Type。服務仍只綁定 loopback，並檢查 Host。
+
+## 測試模式
+
+環境類型（模擬／HTTP）與測試模式（防禦／攻擊）分開選擇。攻擊模式的臨時憑證透過「持有的憑證」輸入，環境設定本身仍不接受 secret。OIDC discovery、標準 token 認證與資源對照請求的支援範圍見 [攻擊模式](ATTACK_MODE.md)。

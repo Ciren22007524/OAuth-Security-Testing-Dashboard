@@ -1,3 +1,8 @@
+import {
+  createAttackRunner,
+  attackCatalog,
+  validateAttackInput,
+} from "./attack-runner.js";
 import { createServer } from "node:http";
 import { catalog, runScenario } from "./runner.js";
 import { createEnvironmentStore, EnvironmentError } from "./environments.js";
@@ -13,6 +18,34 @@ export function createDashboardServer({
   let active = false;
   const environments = createEnvironmentStore(environmentsFile);
   const runHttp = createHttpRunner({ minimumInterval: httpInterval });
+  const runAttack = createAttackRunner({ minimumInterval: httpInterval });
+  const defenseRunners = {
+    http: runHttp,
+    simulation: async (id, profile, options) => ({
+      ...(await runScenario(id, options)),
+      environmentId: profile.id,
+      environmentName: profile.name,
+      environmentRevision: profile.revision,
+      configuration: profile,
+    }),
+  };
+  const modes = Object.freeze({
+    defense: {
+      catalogs: { simulation: catalog, http: httpCatalog },
+      run: (input, profile, options) =>
+        defenseRunners[profile.type](input.id, profile, options),
+    },
+    attack: {
+      catalogs: { simulation: attackCatalog, http: attackCatalog },
+      run: (input, profile, options) =>
+        runAttack(input.id, profile, input.attack, options),
+    },
+  });
+  function testingMode(value = "defense") {
+    if (typeof value !== "string" || !Object.hasOwn(modes, value))
+      throw new EnvironmentError("invalid_testing_mode");
+    return value;
+  }
   return createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -37,11 +70,15 @@ export function createDashboardServer({
         const profile = await environments.get(
           url.searchParams.get("environmentId") || "local",
         );
+        const mode = testingMode(
+          url.searchParams.get("testingMode") || "defense",
+        );
         return json(200, {
           environment:
             profile.type === "simulation" ? "SIMULATION" : "CUSTOM_HTTP",
           profile,
-          catalog: profile.type === "simulation" ? catalog : httpCatalog,
+          testingMode: mode,
+          catalog: modes[mode].catalogs[profile.type],
         });
       }
       if (req.method === "GET" && path === "/api/health")
@@ -101,14 +138,25 @@ export function createDashboardServer({
           const profile = await environments.get(
             input.environmentId || "local",
           );
-          const selectedCatalog =
-            profile.type === "simulation" ? catalog : httpCatalog;
+          const mode = testingMode(input.testingMode);
+          const selectedCatalog = modes[mode].catalogs[profile.type];
+          const allowedFields = [
+            "id",
+            "environmentId",
+            "environmentRevision",
+            "testingMode",
+            ...(mode === "attack" ? ["attack"] : []),
+          ];
+          if (mode === "attack") {
+            try {
+              validateAttackInput(input.attack);
+            } catch {
+              return json(400, { error: "invalid_attack_input" });
+            }
+          }
           if (
             !selectedCatalog.some((s) => s.id === input.id) ||
-            Object.keys(input).some(
-              (k) =>
-                !["id", "environmentId", "environmentRevision"].includes(k),
-            )
+            Object.keys(input).some((k) => !allowedFields.includes(k))
           )
             return json(400, { error: "invalid_scenario" });
           if (
@@ -123,17 +171,9 @@ export function createDashboardServer({
           });
           return json(
             200,
-            profile.type === "http"
-              ? await runHttp(input.id, profile, { signal: controller.signal })
-              : {
-                  ...(await runScenario(input.id, {
-                    signal: controller.signal,
-                  })),
-                  environmentId: profile.id,
-                  environmentName: profile.name,
-                  environmentRevision: profile.revision,
-                  configuration: profile,
-                },
+            await modes[mode].run(input, profile, {
+              signal: controller.signal,
+            }),
           );
         } finally {
           active = false;

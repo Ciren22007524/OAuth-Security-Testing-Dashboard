@@ -35,6 +35,14 @@ npm run test:browser
 
 ![本機 Web 介面](docs/screenshots/web-ui.png)
 
+## 防禦驗證與攻擊模擬
+
+保留原有防禦驗證，透過「模式」切換攻擊者視角。攻擊模式第一版可輸入測試用 client secret，透過 OIDC discovery 嘗試取得 client credentials token，再以未登入對照確認能否讀取指定資源；結果顯示操作成功／被阻擋／待確認。憑證不存進環境設定或報告。
+
+操作、OIDC 支援範圍與情境擴充方式見 [攻擊模式](docs/ATTACK_MODE.md)。這不是完整 OIDC conformance 或使用者冒用驗證。
+
+![攻擊者能力模擬介面](docs/screenshots/attack-ui.png)
+
 ## 選用：Windows 可攜式預覽
 
 在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
