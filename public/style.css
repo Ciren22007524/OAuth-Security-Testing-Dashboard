@@ -190,8 +190,10 @@ summary {
   width: 100%;
 }
 #catalog {
-  max-height: 680px;
+  max-height: min(680px, 50dvh);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
 }
 .scenario {
   display: flex;
@@ -352,7 +354,7 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
   #catalog {
-    max-height: 340px;
+    max-height: min(340px, 45dvh);
   }
   .target-url {
     width: 100%;
