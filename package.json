@@ -10,6 +10,7 @@
     "start": "node --use-env-proxy src/server.js",
     "test": "node --test",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "test:resources": "node scripts/resource-loading-smoke.mjs",
     "test:auth-service": "node scripts/auth-service-smoke.mjs",
     "test:auth-browser": "node scripts/auth-service-browser.mjs",
     "test:auth-environments": "node scripts/auth-service-environments.mjs",

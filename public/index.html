@@ -4,12 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OAuth Security Lab</title>
-    <link rel="stylesheet" href="/style.css" />
-    <script type="module" src="/app.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./app.js"></script>
   </head>
   <body>
     <aside>
-      <a class="brand" href="/"
+      <a class="brand" href="./index.html"
         ><span class="brand-mark">◈</span
         ><span>OAuth <b>Lab</b><small>SECURITY WORKSPACE</small></span></a
       >
@@ -39,10 +39,18 @@
       </div>
     </aside>
     <main>
+      <div id="startup-help" class="startup-help" role="status">
+        尚未連接測試執行器。請在專案目錄執行
+        <code>npm start</code>，再透過本機服務開啟儀表板；直接開 HTML
+        或只放在靜態主機無法執行測試。<noscript
+          >此儀表板需要啟用 JavaScript。</noscript
+        >
+      </div>
       <div class="topbar">
         <span>工作空間 <b>/</b> <strong>安全測試台</strong></span
         ><span class="runner-indicator"
-          ><i class="dot"></i><span id="runner-status">CONNECTING</span></span
+          ><i class="dot"></i
+          ><span id="runner-status">NOT CONNECTED</span></span
         >
       </div>
       <header>
@@ -165,13 +173,11 @@
           <span class="muted">IN-MEMORY ONLY</span>
         </div>
         <pre id="console" role="log" aria-live="polite">
-[ready] 模擬器就緒。尚未執行任何測試。</pre
+[offline] 尚未連接測試執行器。</pre
         >
       </section>
       <footer>
-        <span id="status" role="status"
-          >就緒 · 最多 2 個並行 fixture 請求 / 單一執行情境</span
-        >
+        <span id="status" role="status">尚未連接測試執行器</span>
         <div>
           <button id="export-json" disabled>匯出 JSON</button
           ><button id="export-md" disabled>匯出 Markdown</button
