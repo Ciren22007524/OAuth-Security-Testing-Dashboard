@@ -8,6 +8,10 @@
 
 HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets、catalog 並透過 API 執行情境；不僅檢查 port 或 PID。
 
+## Array 真實來源驗證
+
+執行 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source`。目前查核 Array `7264cca`，9 組既有來源測試通過，涵蓋真實 Worker 的登入、session、callback、claims、簽章、CSRF、登出及入口限流。OIDC fetch／store／limiter 為隔離替身，不代表正式 Google、瀏覽器 cookie 或 Cloudflare runtime 已驗收。契約與完整流程見 [Array 串接盤點](ARRAY_LINE_DEMO.md)。
+
 ## 攻擊模式驗證
 
 `test/attack.test.js` 驗證本地與真實 loopback HTTP target 的 discovery、Basic／POST client 認證、token 交換及資源讀取。包括公開資源對照、OAuth 拒絕與不明回應分類、跨 origin endpoint 與重新導向不轉送憑證、反射 secret／token／Cookie 不出現在證據、請求上限、限流、取消與環境檔不保存憑證。另檢查防禦 catalog 的每項情境均有明確註冊 handler。

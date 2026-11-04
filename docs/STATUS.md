@@ -2,11 +2,18 @@
 
 更新：2026-11-04
 
+## 已找到並查核 Array 實際專案（2026-11-04）
+
+- `Ciren22007524/array-line-demo` @ `7264cca`；目前預設為 `cloudflare/sso-test` Worker。`auth-service` 最新查核為 `4b5473b`，已是標準 OIDC，舊 JSON＋refresh cookie checkout 不再代表現況。
+- Array client 為 `array`、認證 `none`、S256 PKCE；瀏覽器只有本站 HttpOnly session，`/api/me` 依 session 讀取使用者，沒有 Bearer token 登入分支。本站登出保留 issuer／Google SSO。
+- 新增 `test:array-source`，針對 Array 真實 `createApp` 的既有隔離測試執行，9 組全通過；輸出 Git revision、計數與驗證範圍。未對正式網域發送驗測請求、未部署、未修改上游 repo。
+- 契約、限流門檻、具體 callback／cookie／logout 情境與下一階段 adapter 見 `ARRAY_LINE_DEMO.md`；Dashboard UI 尚未接入專用 session／瀏覽器 adapter。
+
 ## 目前驗收方向：array-test × auth-service（2026-11-04）
 
 - 本輪重新 review 驗測流程，新增 `ACCEPTANCE_FLOW.md`，明確區分設計、現有功能與尚未完成的實際整合；本輪沒有宣稱完成 array-test 驗收。
 - 先補三個 P0：多角色目標與憑證路由、實際登入／token／cookie 契約 adapter、有效的正常登入與 API 資料對照；資源 2xx 不足以作成功證據，還需 API 契約驗證。
-- 現有 10 個攻擊情境／80 項測試屬本機與 loopback fixture 證據；尚缺 array-test repo、測試網址與最新服務契約。
+- 現有 10 個攻擊情境／80 項測試屬本機與 loopback fixture 證據；後續已找到 Array repo、名義來源與最新 source 契約；部署與真實登入仍未驗收。
 - 第一個完整驗收切片固定為：正常登入 → 正常 API 對照 → 未登入／持有 token 比較 → 明確結果 → 遮罩報告。後續 callback、跨權限、輪替、瀏覽器跨站類情境依實際支援接入。
 
 ## 最新調整：10 個攻擊情境與獨立參數（2026-11-04）

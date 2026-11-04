@@ -37,7 +37,9 @@ npm run test:browser
 
 ## array-test 整合驗收
 
-目前通用情境尚未適配 array-test 的真實登入／API 契約，不能將本機 fixture 測試當成 demo 驗收完成。下一階段以「分清應用／身分服務／API → 建立正常登入與受保護資料對照 → 逐項攻擊 → 證據與報告」落實，流程、現有差距與驗收清單見 [整合驗測流程](docs/ACCEPTANCE_FLOW.md)。
+已找到 [array-line-demo](https://github.com/Ciren22007524/array-line-demo)，核對其 Cloudflare SSO Worker 使用 public client＋PKCE，瀏覽器以本站 HttpOnly session 存取 `/api/me`。可用 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source` 重跑已通過的 9 組來源測試；實際契約與驗收順序見 [Array 串接盤點](docs/ARRAY_LINE_DEMO.md)。
+
+目前通用情境尚未接入這個專用 adapter，不能將來源／fixture 測試當成正式站驗收完成。下一階段以「分清應用／身分服務／API → 建立正常登入與受保護資料對照 → 逐項攻擊 → 證據與報告」落實，流程、現有差距與驗收清單見 [整合驗測流程](docs/ACCEPTANCE_FLOW.md)。
 
 ## 防禦驗證與攻擊模擬
 
