@@ -19,6 +19,7 @@
 - Node 內建測試與 GitHub Actions 工作流程。
 - 授權碼與 state / access_token / refresh_token URL 參數遮罩；API 拒絕注入測試用 fault 設定。
 - 語法檢查、58 項自動測試、實際啟動 API 及 Chromium 介面操作驗證通過；情境測量為 22 PASS / 1 INCONCLUSIVE。完整證據範圍見 `TEST_PLAN.md`。
+- 符合 `package.json` 宣告的 Node >=24.5 需求：新增 `.nvmrc`（24.5.0），並修正 jwks 控制退化在 Node 24 的相容性問題——注入私鑰材料的 fault 使 `createPublicKey` 在 Node 24 拋例外，現已將解析／驗證例外視為該斷言失敗，情境正確回報 FAIL 並附證據，不再變成 ERROR。Node 22 與 Node 24 皆 58/58 通過。
 
 ## 限制與下一步
 
