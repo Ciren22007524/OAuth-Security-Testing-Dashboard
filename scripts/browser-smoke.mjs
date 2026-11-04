@@ -94,6 +94,36 @@ try {
     }
     throw Error(`Timeout: ${expression}`);
   };
+  async function checkCatalogScrolling() {
+    await evaluate(
+      "document.getElementById('catalog').scrollIntoView({block:'center'});document.getElementById('catalog').scrollTop=0",
+    );
+    const before = await evaluate(
+      "({page:scrollY, x:document.getElementById('catalog').getBoundingClientRect().left+40,y:document.getElementById('catalog').getBoundingClientRect().top+40})",
+    );
+    const wheel = () =>
+      call("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: before.x,
+        y: before.y,
+        deltaX: 0,
+        deltaY: 300,
+      });
+    await wheel();
+    await wait("document.getElementById('catalog').scrollTop>0");
+    if (await evaluate(`scrollY!==${before.page}`))
+      throw Error("Catalog wheel scrolled page");
+    await evaluate(
+      "document.getElementById('catalog').scrollTop=document.getElementById('catalog').scrollHeight",
+    );
+    await wheel();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await evaluate(`scrollY!==${before.page}`))
+      throw Error("Catalog boundary chained scrolling to page");
+    await evaluate(
+      "document.getElementById('catalog').scrollTop=0;window.scrollTo(0,0)",
+    );
+  }
   await call("Runtime.enable");
   await call("Page.enable");
   await call("Browser.setDownloadBehavior", {
@@ -116,6 +146,7 @@ try {
     ))
   )
     throw Error("Initial selection or secondary controls incorrect");
+  await checkCatalogScrolling();
   await evaluate(
     "document.getElementById('scenario-search').value='callback';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
   );
@@ -221,6 +252,7 @@ try {
   });
   if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
     throw Error("Mobile overflow");
+  await checkCatalogScrolling();
   await writeFile(
     join(work, "mobile.png"),
     Buffer.from(
@@ -363,6 +395,7 @@ try {
         "cancel",
         "reload clears state",
         "mobile overflow",
+        "desktop/mobile catalog wheel scroll and boundary containment",
         "no browser exceptions",
         "create/edit/delete environment",
         "custom HTTP execution",
