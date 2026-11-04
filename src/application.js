@@ -149,7 +149,7 @@ export function createDashboardServer({
           ];
           if (mode === "attack") {
             try {
-              validateAttackInput(input.attack);
+              validateAttackInput(input.attack, input.id);
             } catch {
               return json(400, { error: "invalid_attack_input" });
             }

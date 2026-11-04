@@ -1,3 +1,5 @@
+import { demoSettings } from "../src/attack-catalog.js";
+import { attackHandlers } from "../src/attack-scenarios.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -48,15 +50,24 @@ const run = () => createAttackRunner({ minimumInterval: 0 });
 
 test("attack fixture demonstrates client capability without changing defense semantics", async () => {
   const runner = run();
+  const expected = {
+    "secret-scope": "BLOCKED",
+    "refresh-replay": "BLOCKED",
+    "code-replay": "BLOCKED",
+    "pkce-missing": "BLOCKED",
+  };
   for (const scenario of attackCatalog) {
     const result = await runner(scenario.id, profile, {});
-    assert.equal(result.status, "SUCCEEDED");
+    assert.equal(
+      result.status,
+      expected[scenario.id] || "SUCCEEDED",
+      scenario.id,
+    );
     assert.equal(result.testingMode, "attack");
-    assert.equal(result.evidence.length, scenario.requestBudget);
-    assert.equal(result.cleanup, "token-expiry");
+    assert.ok(result.evidence.length <= scenario.requestBudget, scenario.id);
     assert.doesNotMatch(
       JSON.stringify(result),
-      /demo-secret|demo-access-token/,
+      /demo-secret|demo-access-token|demo-issued-|demo-refresh-token|demo-code|demo-private-user/,
     );
     if (scenario.id === "secret-resource")
       assert.deepEqual(
@@ -212,7 +223,6 @@ test("OAuth rejections, malformed success and unavailable resources have distinc
     clientId: "x",
     clientSecret: "a-secret",
     tokenPath: "/token",
-    resourcePath: "/resource",
   };
   assert.equal(
     (await run()("secret-token", live(base), settings)).status,
@@ -229,7 +239,10 @@ test("OAuth rejections, malformed success and unavailable resources have distinc
     "ERROR",
   );
   outcome = "down";
-  const result = await run()("secret-resource", live(base), settings);
+  const result = await run()("secret-resource", live(base), {
+    ...settings,
+    resourcePath: "/resource",
+  });
   assert.equal(result.status, "INCONCLUSIVE");
   assert.equal(result.evidence.length, 1);
 });
@@ -266,7 +279,7 @@ test("attack settings reject URLs, control characters and unexpected data", () =
     { tokenPath: "/token?secret=x" },
     { resourcePath: "/\\evil" },
     { clientSecret: "x\ny" },
-    { authMethod: "none" },
+    { authMethod: "unsupported" },
     { unknown: "x" },
   ])
     assert.throws(() => validateAttackInput(input));
@@ -293,7 +306,7 @@ test("API separates catalogs, rejects mode confusion and never persists credenti
   const attack = await (
     await fetch(base + "/api/catalog?testingMode=attack")
   ).json();
-  assert.equal(attack.catalog.length, 2);
+  assert.equal(attack.catalog.length, 10);
   const created = await post("/api/environments", {
     name: "demo",
     type: "simulation",
@@ -358,7 +371,11 @@ test("API separates catalogs, rejects mode confusion and never persists credenti
     testingMode: "attack",
     environmentId: httpProfile.body.id,
     environmentRevision: httpProfile.body.revision,
-    attack: { clientSecret: DEMO_SECRET, resourcePath: "/resource" },
+    attack: {
+      clientId: "demo-client",
+      clientSecret: DEMO_SECRET,
+      resourcePath: "/resource",
+    },
   });
   assert.equal(httpResult.status, 200);
   assert.equal(httpResult.body.status, "SUCCEEDED");
@@ -399,4 +416,117 @@ test("discovery without supported secret auth sends no secret and cancellation s
   );
   assert.equal(cancelled.status, "ERROR");
   assert.equal(calls, 2);
+});
+
+for (const [id, fault] of [
+  ["code-replay", "allowCodeReplay"],
+  ["refresh-replay", "allowRefreshReplay"],
+  ["pkce-missing", "allowMissingPkce"],
+  ["secret-scope", "allowScopeExpansion"],
+]) {
+  test(`attack detects a deliberately weakened control: ${id}`, async () => {
+    const runner = run();
+    assert.equal((await runner(id, profile, {})).status, "BLOCKED");
+    const result = await runner(
+      id,
+      profile,
+      {},
+      { fixtureOptions: { [fault]: true } },
+    );
+    assert.equal(result.status, "SUCCEEDED");
+    assert.ok(
+      result.evidence.length <=
+        attackCatalog.find((s) => s.id === id).requestBudget,
+    );
+  });
+}
+
+test("all ten scenarios execute against independent HTTP providers with explicit per-case inputs", async (t) => {
+  const expected = {
+    "code-replay": "BLOCKED",
+    "refresh-replay": "BLOCKED",
+    "pkce-missing": "BLOCKED",
+    "secret-scope": "BLOCKED",
+  };
+  for (const scenario of attackCatalog) {
+    assert.equal(typeof attackHandlers[scenario.id], "function");
+    const fixture = await createAttackFixture();
+    try {
+      const result = await run()(
+        scenario.id,
+        live(fixture.url),
+        demoSettings(scenario.id),
+      );
+      assert.equal(
+        result.status,
+        expected[scenario.id] || "SUCCEEDED",
+        scenario.id,
+      );
+      assert.doesNotMatch(
+        JSON.stringify(result),
+        /demo-secret|demo-access-token|demo-issued-|demo-refresh-token|demo-code|demo-private-user/,
+      );
+    } finally {
+      await fixture.close();
+    }
+  }
+});
+
+test("invalid baseline credentials do not manufacture replay, scope or PKCE protection", async () => {
+  const cases = [
+    ["code-replay", { code: "expired-code" }],
+    ["refresh-replay", { refreshToken: "invalid-refresh" }],
+    ["pkce-missing", { codeVerifier: "incorrect-verifier" }],
+    ["secret-scope", { clientSecret: "incorrect-secret" }],
+  ];
+  for (const [id, input] of cases)
+    assert.equal((await run()(id, profile, input)).status, "INCONCLUSIVE", id);
+});
+
+test("scenario schema rejects unrelated credentials and never inherits environment parameters", async (t) => {
+  assert.throws(() =>
+    validateAttackInput(
+      { clientSecret: "not-for-this-case" },
+      "token-resource",
+    ),
+  );
+  assert.throws(() =>
+    validateAttackInput({ accessToken: "not-for-this-case" }, "code-exchange"),
+  );
+  assert.throws(() =>
+    validateAttackInput({ authMethod: "none" }, "secret-token"),
+  );
+  let calls = 0;
+  const base = await target(t, (req, res) => {
+    calls++;
+    json(res, 500, {});
+  });
+  const result = await run()(
+    "secret-token",
+    { ...live(base), clientId: "environment-only" },
+    { clientSecret: "case-only" },
+  );
+  assert.equal(result.status, "INCONCLUSIVE");
+  assert.equal(calls, 0);
+  assert.ok(!("clientId" in result.configuration));
+});
+
+test("public-client code and refresh exchanges use explicit none authentication", async (t) => {
+  for (const id of ["code-exchange", "refresh-token"]) {
+    const fixture = await createAttackFixture();
+    try {
+      const settings = {
+        ...demoSettings(id),
+        clientId: "demo-public",
+        authMethod: "none",
+      };
+      delete settings.clientSecret;
+      assert.equal(
+        (await run()(id, live(fixture.url), settings)).status,
+        "SUCCEEDED",
+      );
+    } finally {
+      await fixture.close();
+    }
+  }
 });

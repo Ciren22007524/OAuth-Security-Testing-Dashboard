@@ -1,129 +1,24 @@
+import { createAttackFixture } from "./attack-fixture.js";
 import {
-  createAttackFixture,
-  DEMO_CLIENT,
-  DEMO_SECRET,
-} from "./attack-fixture.js";
+  attackCatalog,
+  validateAttackInput,
+  demoSettings,
+} from "./attack-catalog.js";
+import { attackHandlers } from "./attack-scenarios.js";
+export { attackCatalog, validateAttackInput } from "./attack-catalog.js";
 
-export const attackCatalog = [
-  {
-    id: "secret-token",
-    title: "持有 client secret：嘗試取得 access token",
-    expected:
-      "以 client_credentials 嘗試取得 token；成功只證明 client 能力，不代表可冒用使用者或取得 ID token。",
-  },
-  {
-    id: "secret-resource",
-    title: "持有 client secret：嘗試讀取指定資源",
-    expected:
-      "先確認指定 GET 路徑未附憑證回 401／403，再取得 token 比較能否讀取；只記錄該路徑的能力。",
-  },
-].map((s) => ({
-  ...s,
-  category: "Client secret",
-  revision: 1,
-  requestBudget: s.id === "secret-resource" ? 4 : 2,
-  prerequisites: [
-    "client ID 與 client secret；HTTP 目標須支援標準 OAuth token 請求",
-  ],
-  testingMode: "attack",
-}));
-
-function path(value) {
-  if (
-    typeof value !== "string" ||
-    !/^\/(?!\/)/.test(value) ||
-    /[\\?#\u0000-\u0020\u007f]/.test(value)
-  )
-    throw new Error("Invalid endpoint path");
-  const parsed = new URL(value, "http://target.invalid");
-  if (parsed.origin !== "http://target.invalid" || parsed.pathname !== value)
-    throw new Error("Invalid endpoint path");
-  return value;
-}
-export function validateAttackInput(input = {}) {
-  const fields = [
-    "clientId",
-    "clientSecret",
-    "scope",
-    "tokenPath",
-    "resourcePath",
-    "authMethod",
-  ];
-  if (
-    !input ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    Object.keys(input).some((k) => !fields.includes(k))
-  )
-    throw new Error("Invalid attack input");
-  for (const value of Object.values(input))
-    if (
-      typeof value !== "string" ||
-      value.length > 2048 ||
-      /[\u0000-\u001f\u007f]/.test(value)
-    )
-      throw new Error("Invalid attack input");
-  for (const key of ["tokenPath", "resourcePath"])
-    if (input[key]) path(input[key]);
-  if (
-    input.authMethod &&
-    !["auto", "client_secret_basic", "client_secret_post"].includes(
-      input.authMethod,
-    )
-  )
-    throw new Error("Invalid client authentication");
-  return { ...input };
-}
-const handlers = {
-  "secret-token": async ({ acquire }) => {
-    await acquire();
-  },
-  "secret-resource": async ({ acquire, request, settings, result }) => {
-    if (!settings.resourcePath) {
-      result.status = "INCONCLUSIVE";
-      result.limitation = "尚未填寫資源路徑，未送出請求。";
-      return;
-    }
-    const baseline = await request(settings.resourcePath);
-    if (baseline.status >= 200 && baseline.status < 300) {
-      result.status = "INCONCLUSIVE";
-      result.observations.push(
-        "未附憑證即可讀取此路徑，不能把公開存取算成 secret 帶來的能力；未傳送 secret。",
-      );
-      return;
-    }
-    if (![401, 403].includes(baseline.status)) {
-      result.status = "INCONCLUSIVE";
-      result.observations.push(
-        "未登入對照未回 401／403，無法確認這是受保護的資源；未傳送 secret。",
-      );
-      return;
-    }
-    const token = await acquire();
-    if (!token) return;
-    const response = await request(settings.resourcePath, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    result.status =
-      response.status >= 200 && response.status < 300
-        ? "SUCCEEDED"
-        : [401, 403].includes(response.status)
-          ? "BLOCKED"
-          : "INCONCLUSIVE";
-    result.observations.push(
-      result.status === "SUCCEEDED"
-        ? "取得的 token 可讀取指定路徑；未證明其他路徑或管理權限。"
-        : "已取得 token，但指定資源未回傳成功結果；詳見 HTTP 狀態。",
-    );
-  },
-};
 export function createAttackRunner({ minimumInterval = 500 } = {}) {
   const lastRequests = new Map();
   const cooldowns = new Map();
-  return async function runAttack(id, environment, input, { signal } = {}) {
+  return async function runAttack(
+    id,
+    environment,
+    input,
+    { signal, fixtureOptions } = {},
+  ) {
     const scenario = attackCatalog.find((s) => s.id === id);
     if (!scenario) throw new Error("Unknown attack scenario");
-    const settings = validateAttackInput(input);
+    const settings = validateAttackInput(input, id);
     const result = {
       ...scenario,
       timestamp: new Date().toISOString(),
@@ -132,7 +27,13 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
       environmentId: environment.id,
       environmentName: environment.name,
       environmentRevision: environment.revision,
-      configuration: { ...environment },
+      configuration: {
+        id: environment.id,
+        name: environment.name,
+        type: environment.type,
+        revision: environment.revision,
+        ...(environment.baseUrl ? { baseUrl: environment.baseUrl } : {}),
+      },
       target: environment.baseUrl || "isolated-attack-fixture",
       status: "INCONCLUSIVE",
       assertions: [],
@@ -140,25 +41,29 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
       evidence: [],
       cleanup: "not-needed",
       limitation:
-        "只驗證指定 client、scope 與路徑；client secret 不等於使用者 session。取得的 token 不保存、不匯出，亦未自動撤銷，其效期由目標管理。",
+        "只驗證本情境提供的參數；取得的 token 與個人資料不保存、不匯出。已簽發 token 未自動撤銷，效期由目標管理。",
     };
     const started = performance.now();
     let fixture;
     try {
       if (environment.type === "simulation") {
-        fixture = await createAttackFixture();
-        settings.clientId ||= DEMO_CLIENT;
-        settings.clientSecret ||= DEMO_SECRET;
-        settings.resourcePath ||= "/resource";
-      } else {
-        settings.clientId ||= environment.clientId;
-        if (!settings.clientId || !settings.clientSecret) {
-          result.limitation = "請提供 client ID 與 client secret；未送出請求。";
-          return result;
-        }
+        fixture = await createAttackFixture(fixtureOptions);
+        for (const [key, value] of Object.entries(demoSettings(id)))
+          if (!settings[key]) settings[key] = value;
+      }
+      const missing = scenario.required.filter((key) => !settings[key]);
+      if (missing.length) {
+        result.limitation = `本情境尚未填寫：${missing.map((key) => scenario.fields.find((f) => f.key === key).label).join("、")}。未送出請求。`;
+        return result;
       }
       const base = fixture?.url || environment.baseUrl;
-      const secrets = [settings.clientSecret];
+      const secrets = [
+        settings.clientSecret,
+        settings.accessToken,
+        settings.refreshToken,
+        settings.code,
+        settings.codeVerifier,
+      ];
       const safe = (value) =>
         typeof value === "string"
           ? secrets
@@ -255,12 +160,17 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
             },
             body: form
               ? {
-                  grant_type: "client_credentials",
+                  grant_type: form.get("grant_type"),
                   ...(form.has("client_id")
                     ? { client_id: safe(form.get("client_id")) }
                     : {}),
-                  ...(form.has("client_secret")
-                    ? { client_secret: "[REDACTED]" }
+                  ...Object.fromEntries(
+                    ["client_secret", "refresh_token", "code", "code_verifier"]
+                      .filter((key) => form.has(key))
+                      .map((key) => [key, "[REDACTED]"]),
+                  ),
+                  ...(form.has("redirect_uri")
+                    ? { redirect_uri: safe(form.get("redirect_uri")) }
                     : {}),
                   ...(form.has("scope")
                     ? { scope: safe(form.get("scope")) }
@@ -275,6 +185,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
               accessTokenPresent:
                 typeof body.access_token === "string" &&
                 Boolean(body.access_token),
+              subjectPresent: typeof body.sub === "string" && Boolean(body.sub),
               idTokenPresent:
                 typeof body.id_token === "string" && Boolean(body.id_token),
               error: knownErrors.includes(body.error) ? body.error : undefined,
@@ -301,40 +212,61 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
         }
         return { status: response.status, body };
       }
-      const acquire = async () => {
-        let endpoint = settings.tokenPath;
+      let metadata;
+      async function discovery() {
+        if (metadata) return metadata;
+        const response = await request("/.well-known/openid-configuration");
+        if (
+          response.status !== 200 ||
+          typeof response.body.issuer !== "string" ||
+          new URL(response.body.issuer).origin !== base
+        ) {
+          result.limitation =
+            "無法取得同目標的 OIDC discovery；請確認目標或指定端點路徑。";
+          return;
+        }
+        metadata = response.body;
+        return metadata;
+      }
+      async function endpoint(key, override) {
+        if (override) return override;
+        const document = await discovery();
+        if (!document || typeof document[key] !== "string") {
+          result.limitation =
+            "Discovery 未提供本情境需要的端點；請明確指定同目標的路徑。";
+          return;
+        }
+        const url = new URL(document[key]);
+        if (url.origin !== base || url.username || url.password || url.hash)
+          throw new Error("Endpoint outside selected target");
+        return url.href;
+      }
+      async function exchange(parameters) {
+        const target = await endpoint("token_endpoint", settings.tokenPath);
+        if (!target) return;
         let auth = settings.authMethod || "auto";
-        if (!endpoint) {
-          const metadata = await request("/.well-known/openid-configuration");
-          if (
-            metadata.status !== 200 ||
-            typeof metadata.body.token_endpoint !== "string" ||
-            typeof metadata.body.issuer !== "string" ||
-            new URL(metadata.body.issuer).origin !== base
-          ) {
+        if (auth === "auto") {
+          const document = settings.tokenPath ? undefined : await discovery();
+          const methods = document?.token_endpoint_auth_methods_supported || [
+            "client_secret_basic",
+          ];
+          auth = ["client_secret_basic", "client_secret_post"].find(
+            (method) => Array.isArray(methods) && methods.includes(method),
+          );
+          if (!auth) {
+            result.status = "INCONCLUSIVE";
             result.limitation =
-              "無法取得同目標的 OIDC discovery；請確認目標或明確指定 token 路徑。未傳送 secret。";
+              "Discovery 未宣告支援此情境的 client secret 認證；未傳送憑證。";
             return;
           }
-          endpoint = metadata.body.token_endpoint;
-          if (auth === "auto") {
-            const methods = metadata.body
-              .token_endpoint_auth_methods_supported || ["client_secret_basic"];
-            auth = ["client_secret_basic", "client_secret_post"].find(
-              (method) => Array.isArray(methods) && methods.includes(method),
-            );
-            if (!auth) {
-              result.limitation =
-                "Discovery 未宣告支援 client secret 認證；未傳送 secret。";
-              return;
-            }
-          }
         }
-        if (auth === "auto") auth = "client_secret_basic";
-        const body = new URLSearchParams({
-          grant_type: "client_credentials",
-          ...(settings.scope ? { scope: settings.scope } : {}),
-        });
+        if (auth !== "none" && !settings.clientSecret) {
+          result.status = "INCONCLUSIVE";
+          result.limitation =
+            "此認證方式需要本情境的 client secret；公開 client 請明確選擇不附 secret。";
+          return;
+        }
+        const body = new URLSearchParams(parameters);
         const headers = { "Content-Type": "application/x-www-form-urlencoded" };
         if (auth === "client_secret_basic") {
           const encode = (value) =>
@@ -342,46 +274,22 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
           headers.Authorization = `Basic ${Buffer.from(`${encode(settings.clientId)}:${encode(settings.clientSecret)}`).toString("base64")}`;
         } else {
           body.set("client_id", settings.clientId);
-          body.set("client_secret", settings.clientSecret);
+          if (auth === "client_secret_post")
+            body.set("client_secret", settings.clientSecret);
         }
-        const response = await request(endpoint, {
+        return request(target, {
           method: "POST",
           headers,
           body: body.toString(),
         });
-        const token = response.body.access_token;
-        if (
-          response.status >= 200 &&
-          response.status < 300 &&
-          typeof token === "string" &&
-          token.length > 0 &&
-          /^Bearer$/i.test(response.body.token_type || "") &&
-          !/[\r\n]/.test(token)
-        ) {
-          result.status = "SUCCEEDED";
-          result.cleanup = "token-expiry";
-          result.observations.push(
-            "持有的 client secret 可取得 Bearer access token；不代表使用者登入、ID token 或越權。",
-          );
-          return token;
-        }
-        result.status =
-          [400, 401, 403].includes(response.status) &&
-          [
-            "invalid_client",
-            "unauthorized_client",
-            "unsupported_grant_type",
-            "invalid_scope",
-          ].includes(response.body.error)
-            ? "BLOCKED"
-            : "INCONCLUSIVE";
-        result.observations.push(
-          result.status === "BLOCKED"
-            ? "目標拒絕本次 client credentials 請求；不代表所有攻擊路徑都被阻擋。"
-            : "回應不足以證明取得可使用的 Bearer access token。",
-        );
-      };
-      await handlers[id]({ acquire, request, settings, result });
+      }
+      await attackHandlers[id]({
+        exchange,
+        endpoint,
+        request,
+        settings,
+        result,
+      });
     } catch {
       result.status = result.rateLimited ? "INCONCLUSIVE" : "ERROR";
       result.error = signal?.aborted

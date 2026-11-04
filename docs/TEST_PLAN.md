@@ -12,7 +12,9 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 `test/attack.test.js` 驗證本地與真實 loopback HTTP target 的 discovery、Basic／POST client 認證、token 交換及資源讀取。包括公開資源對照、OAuth 拒絕與不明回應分類、跨 origin endpoint 與重新導向不轉送憑證、反射 secret／token／Cookie 不出現在證據、請求上限、限流、取消與環境檔不保存憑證。另檢查防禦 catalog 的每項情境均有明確註冊 handler。
 
-Chromium 流程涵蓋模式切換、操作成功／被阻擋標示、憑證變更清空舊結果、攻擊報告遮罩、離開模式清除 secret，以及原有防禦結果隔離。正式 OIDC provider、Google 登入與完整 OIDC conformance 尚未驗證。
+Chromium 流程逐項執行全部 10 個攻擊情境，檢查 schema 對應表單、草稿互不混用、修改只清除本項結果、必填校驗、環境 client ID 不繼承、攻擊報告遮罩、離開模式清除草稿，以及原有防禦結果隔離。
+
+Node 測試也逐項對獨立 HTTP provider 執行所有情境，並以可重播 code、可重用 refresh、可省略 verifier、可新增 scope 的刻意弱化 fixture 驗證成功路徑；無效對照必須回 INCONCLUSIVE。正式 OIDC provider、Google 登入與完整 OIDC conformance 尚未驗證。
 
 ## 手動介面驗證
 
@@ -24,7 +26,7 @@ Chromium 流程涵蓋模式切換、操作成功／被阻擋標示、憑證變�
 
 ## 不在目前驗證範圍
 
-已唯讀核對 auth-service commit `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13`：client state 上限 512、provider state 由伺服器產生、`__Host-oauth_state` 的 10 分鐘交易、callback 到期導回 `login_expired`，以及寬限期內不再次換 cookie。模擬器沿用這些邊界，但以 JSON 正規化錯誤（正式 authorize / callback 使用 HTML），省略清除 cookie、真實 provider、D1、PKCE 與身份 allowlist。它仍不能當成 production 測試結果。
+已唯讀核對 auth-service commit `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13`：client state 上限 512、provider state 由伺服器產生、`__Host-oauth_state` 的 10 分鐘交易、callback 到期導回 `login_expired`，以及寬限期內不再次換 cookie。原有防禦模擬器沿用這些邊界，但以 JSON 正規化錯誤（正式 authorize / callback 使用 HTML），省略清除 cookie、真實 provider、D1、PKCE 與身份 allowlist。它仍不能當成 production 測試結果。
 
 沒有連接正式 auth-service 或真實 Google、Cloudflare D1。沒有瀏覽器 CORS / SameSite / Secure cookie 的實證。模擬器已提供 logout、JWKS、discovery 與固定窗口限流；另有真實 Hono 原始碼與 Chromium 的隔離本機整合驗證，見 `LOCAL_INTEGRATION.md`。
 

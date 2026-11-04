@@ -60,4 +60,4 @@ redirect／state 檢查先用已登記的合法設定建立短期 OAuth 交易�
 
 ## 測試模式
 
-環境類型（模擬／HTTP）與測試模式（防禦／攻擊）分開選擇。攻擊模式的臨時憑證透過「持有的憑證」輸入，環境設定本身仍不接受 secret。OIDC discovery、標準 token 認證與資源對照請求的支援範圍見 [攻擊模式](ATTACK_MODE.md)。
+環境類型（模擬／HTTP）與測試模式（防禦／攻擊）分開選擇。攻擊模式的參數在各情境右側表單獨立填寫，環境只選目標，不沿用環境的防禦用 client ID／Origin／redirect URI；環境設定本身仍不接受 secret。OIDC discovery、標準 token 認證與資源對照請求的支援範圍見 [攻擊模式](ATTACK_MODE.md)。
