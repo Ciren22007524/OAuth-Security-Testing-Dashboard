@@ -1,0 +1,60 @@
+name: Windows portable release
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.19.0"
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build:portable
+      - name: Verify standalone Windows executable
+        shell: pwsh
+        run: |
+          & .\dist\OAuthSecurityLab-windows-x64.exe --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone executable smoke test failed' }
+      - name: Package portable download
+        shell: pwsh
+        run: |
+          Copy-Item docs/WINDOWS-QUICKSTART.txt dist/START-HERE.txt
+          Compress-Archive -Path dist/OAuthSecurityLab-windows-x64.exe,dist/NODE-LICENSE.txt,dist/APP-LICENSE.txt,dist/START-HERE.txt -DestinationPath dist/OAuthSecurityLab-windows-x64.zip
+          $hash = (Get-FileHash dist/OAuthSecurityLab-windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  OAuthSecurityLab-windows-x64.zip" | Set-Content dist/OAuthSecurityLab-windows-x64.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: |
+            dist/OAuthSecurityLab-windows-x64.exe
+            dist/OAuthSecurityLab-windows-x64.exe.sha256
+            dist/OAuthSecurityLab-windows-x64.zip
+            dist/OAuthSecurityLab-windows-x64.zip.sha256
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
+          path: release
+      - name: Publish tested Windows preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$RELEASE_TAG" release/* --repo "$RELEASE_REPO" --verify-tag --prerelease --title "OAuth Lab $RELEASE_TAG — Windows preview" --notes "Windows x64 portable preview. Double-click the executable to start the embedded local service and open your browser. No Node.js installation is needed. Windows CI validates the standalone assets and runner before publishing. This preview is not code-signed. See the included START-HERE.txt and licenses."
