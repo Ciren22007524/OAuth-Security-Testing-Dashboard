@@ -43,3 +43,12 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 - Chromium：環境新增／修改／刪除、HTTP health 實際執行、切換保留各環境結果、修改後不沿用舊版本結果、重整保留環境與選擇、正確匯出目標與手機表單皆通過。
 - `AUTH_SERVICE_PATH=/tmp/oauth-auth-service-review npm run test:auth-environments`：真實 Hono HTTP bridge 全部 10 個情境 PASS；假 provider／記憶體 store，不是正式服務驗收。
 - `--use-env-proxy` 啟動方式下，本機模擬 rotation 與自訂 loopback health 均實際通過，未移除代理或停用 TLS。
+
+## 可攜式預覽（2026-11-04 新增）
+
+- 新增 desktop launcher、設定路徑、PE 未簽章處理測試後，最新 `npm test` 為 61 通過、0 失敗／跳過／取消；語法檢查為 24 個 JS 模組。
+- `npm ci` 與 native SEA build 通過；Linux 單檔 `--smoke-test` 實際載入 HTML／CSS／JS、環境 API 與 rotation 並通過。
+- `npm run test:portable` 在專案目錄外啟動真實單檔程式，驗證內嵌介面、23 個情境、實際 runner 與設定保存通過。
+- 已將 main PR #1 的 Node 24 JWKS 修正納入並重新跑 61 個測試／重建；沒有覆蓋他人的修改。
+- Windows x64 成品已交叉產生、核對 PE／SEA 與官方 Node checksum；未在本機執行 Windows EXE。Windows 工作流程通過才會發布 preview Release，狀態需查 GitHub，不能將本機 build 當作 Windows CI 通過。
+- 原有根／子路徑與完整瀏覽器流程在共用服務拆分後已通過；新增 Node 24 相容性修正後再通過 portable smoke／browser，未改動前端外觀。
