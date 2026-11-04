@@ -8,7 +8,7 @@ test("dashboard serves assets and runs only same-origin simulation requests", as
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    for (const path of ["/", "/app.js", "/style.css"]) {
+    for (const path of ["/", "/index.html", "/app.js", "/style.css"]) {
       const response = await fetch(base + path);
       assert.equal(response.status, 200);
       assert.match(

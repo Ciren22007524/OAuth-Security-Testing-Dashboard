@@ -18,7 +18,7 @@ function environmentControls() {
     currentEnvironment.builtin;
 }
 async function refreshEnvironments() {
-  const response = await fetch("/api/environments");
+  const response = await fetch("./api/environments");
   if (!response.ok) throw new Error("無法載入環境設定");
   environments = (await response.json()).environments;
   $("environment-count").textContent = `${environments.length} 個環境`;
@@ -48,11 +48,12 @@ async function selectEnvironment(id) {
   environmentControls();
   try {
     const response = await fetch(
-      "/api/catalog?environmentId=" + encodeURIComponent(id),
+      "./api/catalog?environmentId=" + encodeURIComponent(id),
     );
     if (!response.ok) throw new Error("無法載入環境；請重新整理設定");
     const data = await response.json();
     currentEnvironment = data.profile;
+    $("startup-help").hidden = true;
     catalog = data.catalog;
     const key = `${currentEnvironment.id}:${currentEnvironment.revision}`;
     if (!resultGroups.has(key)) resultGroups.set(key, new Map());
@@ -137,7 +138,7 @@ async function saveEnvironment(remove = false) {
             : {}),
         };
     const response = await fetch(
-      "/api/environments" +
+      "./api/environments" +
         (editingEnvironment ? "/" + editingEnvironment.id : ""),
       {
         method: remove ? "DELETE" : editingEnvironment ? "PUT" : "POST",
@@ -378,7 +379,7 @@ async function execute(scenarios) {
       $("status").textContent = `執行中：${scenario.title}`;
       render();
       detail();
-      const response = await fetch("/api/run", {
+      const response = await fetch("./api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -485,4 +486,6 @@ try {
   );
 } catch {
   $("status").textContent = "無法連接執行器或讀取環境設定，請檢查服務。";
+  $("runner-status").textContent = "OFFLINE";
+  $("startup-help").hidden = false;
 }
