@@ -81,4 +81,17 @@
 
 若要測試真實登入、正式 Google／D1 或帶 session 的撤銷，需要先決定隔離測試身份與 session 注入方式。這不阻擋目前的環境管理與無 session 檢查；不會自動變更正式 CLIENTS。機密不能貼到對話或寫入設定／報告。
 
-GitHub API 網域仍被代理封鎖，無法建立 PR 或確認遠端 CI；Git 推送可用，先前已依使用者合併指示使用一般 merge commit 推送 main。
+本輪 GitHub API 查詢仍回 Forbidden，無法以 API 確認目前 PR／CI 狀態；Git HTTPS 讀寫可用。PR #2 作者曾記錄 PR #1 的 CI 通過，屬其歷史驗證紀錄，本輪未重新查得遠端結果。
+
+## PR #2 與分支整理（2026-11-04）
+
+- PR #2 的 head 為 `334bdb27ed726bc3e999428f8ecaa415825caa16`，只有 STATUS／handoff 文件，基準是較舊的 main。
+- 保留 main 較新的完整專案／Windows 預覽交接，整合舊 PR 仍有效的待辦，不用舊專項交接覆蓋現況。本輪沒有修改應用或 CI 工作流程。
+- 盤點時有 main、6 個已合併功能分支及 PR #2 交接分支。清理前已建立並驗證完整 Git bundle；確認 commit 可由 main 到達後才刪除分支，版本 tag 保留。
+
+## 下一步
+
+- 檢視一般 CI 是否改由 `.nvmrc` 讀 Node 版本：目前 CI 為 `24`、`.nvmrc` 為 `24.5.0`；Windows Release 固定 `24.19.0`。統一前需確認 SEA 建置與版本相容性，本輪未把這項工作標為完成。
+- 帶 session 的遠端輪替／撤銷測試：需先決定隔離測試身份與 session 注入方式。
+- TypeScript 型別檢查或 lint 是否需要另行決定，並非本輪分支清理的修改範圍。
+- 雲端工具版本應以實際輸出為準；本輪使用 Node v24.19.0，不能沿用舊交接中「預設 Node 22」的描述要求使用者修改 PATH。
