@@ -77,7 +77,7 @@ try {
     );
   }
   const styled =
-    "getComputedStyle(document.body).backgroundColor==='rgb(9, 14, 25)' && getComputedStyle(document.querySelector('aside')).position==='fixed'";
+    "getComputedStyle(document.body).backgroundColor==='rgb(9, 14, 25)' && getComputedStyle(document.querySelector('.workspace')).display==='grid'";
   await browser.call("Emulation.setDeviceMetricsOverride", {
     width: 1440,
     height: 1000,

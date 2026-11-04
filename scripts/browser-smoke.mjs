@@ -110,6 +110,12 @@ try {
   await wait(
     `document.querySelectorAll('.scenario').length===${scenarioCount}`,
   );
+  if (
+    !(await evaluate(
+      "document.querySelector('.scenario[aria-pressed=true]')!==null && !document.querySelector('.technical').open && !document.getElementById('execution-log').open && document.getElementById('environment-edit').hidden",
+    ))
+  )
+    throw Error("Initial selection or secondary controls incorrect");
   await evaluate(
     "document.getElementById('scenario-search').value='callback';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
   );
@@ -131,6 +137,12 @@ try {
     catalog.filter((s) => s.category === "JWT").length
   )
     throw Error("Filter failed");
+  if (
+    !(await evaluate(
+      "document.querySelector('.scenario[aria-pressed=true]')!==null && document.getElementById('detail').textContent.includes(document.querySelector('.scenario[aria-pressed=true] strong').textContent)",
+    ))
+  )
+    throw Error("Filtered selection and detail disagree");
   await evaluate(
     "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
   );
@@ -153,7 +165,7 @@ try {
   )
     throw Error(JSON.stringify(stats));
   await evaluate(
-    "document.getElementById('export-json').click();document.getElementById('export-md').click()",
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click();document.querySelector('.export-menu').open=true;document.getElementById('export-md').click()",
   );
   for (let i = 0; i < 50; i++) {
     if (
@@ -244,7 +256,7 @@ try {
     `document.getElementById('profile-name').value='My QA target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('environment-form').requestSubmit()`,
   );
   await wait(
-    "!document.getElementById('environment-dialog').open && document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP')",
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
   );
   if ((await evaluate("document.getElementById('total').textContent")) !== "0")
     throw Error("Mixed environment results");
@@ -269,7 +281,7 @@ try {
     `document.getElementById('environment-select').value=${JSON.stringify(customId)};document.getElementById('environment-select').dispatchEvent(new Event('change'))`,
   );
   await wait(
-    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+    "document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP' && !document.getElementById('environment-select').disabled",
   );
   if ((await evaluate("document.getElementById('pass').textContent")) !== "1")
     throw Error("Custom result not retained");
@@ -283,7 +295,7 @@ try {
     throw Error("Stale configuration results retained");
   await call("Page.reload");
   await wait(
-    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+    "document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP' && !document.getElementById('environment-select').disabled",
   );
   if (
     (await evaluate("document.getElementById('environment-select').value")) !==
@@ -296,7 +308,9 @@ try {
   await wait(
     "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
   );
-  await evaluate("document.getElementById('export-json').click()");
+  await evaluate(
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+  );
   const customFile = join(downloads, `oauth-${customId}-report.json`);
   let customReport;
   for (let i = 0; i < 50; i++) {

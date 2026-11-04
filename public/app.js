@@ -9,6 +9,8 @@ let editingEnvironment;
 const mode = () =>
   currentEnvironment?.type === "http" ? "CUSTOM_HTTP" : "SIMULATION";
 function environmentControls() {
+  $("environment-edit").hidden =
+    !currentEnvironment || currentEnvironment.builtin;
   $("environment-select").disabled = running || loadingEnvironment;
   $("environment-new").disabled = running || loadingEnvironment;
   $("environment-edit").disabled =
@@ -21,7 +23,6 @@ async function refreshEnvironments() {
   const response = await fetch("./api/environments");
   if (!response.ok) throw new Error("無法載入環境設定");
   environments = (await response.json()).environments;
-  $("environment-count").textContent = `${environments.length} 個環境`;
   const validGroups = new Set(
     environments.map((profile) => `${profile.id}:${profile.revision}`),
   );
@@ -29,10 +30,7 @@ async function refreshEnvironments() {
     if (!validGroups.has(key)) resultGroups.delete(key);
   $("environment-select").replaceChildren(
     ...environments.map((profile) => {
-      const option = element(
-        "option",
-        `${profile.name} · ${profile.type === "http" ? "HTTP" : "模擬"}`,
-      );
+      const option = element("option", profile.name);
       option.value = profile.id;
       return option;
     }),
@@ -58,20 +56,28 @@ async function selectEnvironment(id) {
     const key = `${currentEnvironment.id}:${currentEnvironment.revision}`;
     if (!resultGroups.has(key)) resultGroups.set(key, new Map());
     results = resultGroups.get(key);
-    selected = undefined;
+    selected = catalog[0]?.id;
+    $("scenario-search").value = "";
+    $("filter").replaceChildren(
+      element("option", "所有分類"),
+      ...[...new Set(catalog.map((s) => s.category))].map((category) =>
+        element("option", category),
+      ),
+    );
+    $("filter").firstElementChild.value = "all";
     $("environment-select").value = currentEnvironment.id;
-    $("environment-mode").textContent = "● " + mode();
+    $("environment-mode").textContent =
+      currentEnvironment.type === "http" ? "HTTP 服務" : "隔離模擬";
+    $("environment-mode").dataset.mode = mode();
     $("environment-mode").classList.toggle(
       "http",
       currentEnvironment.type === "http",
     );
-    $("environment-target").textContent =
-      currentEnvironment.baseUrl || "隔離協定模擬器";
+    $("environment-target").textContent = currentEnvironment.baseUrl || "";
     $("environment-notice").textContent =
       currentEnvironment.type === "http"
-        ? `HTTP 目標：${currentEnvironment.baseUrl}。只執行無登入 session 的有界檢查，不跟隨重新導向；缺少設定會標為待確認。`
-        : "此處測量本機隔離 fixture。結果不代表任何 HTTP 目標或正式服務已通過。";
-    $("catalog-count").textContent = `/ ${catalog.length}`;
+        ? "只檢查公開端點與未登入請求；缺少必要設定的情境會標為待確認。"
+        : "執行內建隔離模擬，不會連線到你的服務。通過不代表正式服務安全。";
     $("console").textContent =
       `[ready] ${currentEnvironment.name} · ${mode()}。結果依環境及設定版本分開保留。`;
     $("status").textContent = `就緒 · ${currentEnvironment.name}`;
@@ -200,26 +206,10 @@ function render() {
     const label = element("span", undefined, "case-label");
     label.append(
       element("strong", scenario.title),
-      element(
-        "small",
-        `${scenario.category.toUpperCase()}  /  ${scenario.severity.toUpperCase()}`,
-      ),
+      element("small", scenario.category),
     );
     const status = results.get(scenario.id)?.status || "未執行";
-    const icon =
-      { OAuth: "↗", Session: "⌁", JWT: "◇", Browser: "◎", Service: "⌘" }[
-        scenario.category
-      ] || "◈";
-    const symbol = element("span", icon, "case-symbol");
-    symbol.setAttribute("aria-hidden", "true");
-    const arrow = element("span", "›", "case-arrow");
-    arrow.setAttribute("aria-hidden", "true");
-    button.append(
-      symbol,
-      label,
-      element("span", status, `result ${status}`),
-      arrow,
-    );
+    button.append(label, element("span", status, `result ${status}`));
     button.onclick = () => {
       selected = scenario.id;
       render();
@@ -239,42 +229,21 @@ function render() {
   const values = [...results.values()];
   $("total").textContent = values.length;
   $("pass").textContent = values.filter((r) => r.status === "PASS").length;
-  $("fail").textContent = values.filter((r) =>
-    ["FAIL", "ERROR"].includes(r.status),
-  ).length;
+  $("fail").textContent = values.filter((r) => r.status === "FAIL").length;
+  $("error").textContent = values.filter((r) => r.status === "ERROR").length;
   $("inconclusive").textContent = values.filter(
     (r) => r.status === "INCONCLUSIVE",
   ).length;
-  $("coverage-progress").max = catalog.length || 1;
-  $("coverage-progress").value = values.length;
-  $("coverage-label").textContent =
-    `${values.length} / ${catalog.length} 已完成`;
-  $("runner-status").textContent = running ? "RUNNING" : "RUNNER READY";
-  $("runner-status").dataset.state = running ? "running" : "ready";
+  $("runner-status").hidden = true;
   $("export-json").disabled = $("export-md").disabled =
     running || !values.length;
+  return visible;
 }
 function detail() {
   const scenario = catalog.find((s) => s.id === selected);
   if (!scenario) {
     const empty = element("div", undefined, "empty");
-    const orbit = element("div", undefined, "empty-orbit");
-    orbit.setAttribute("aria-hidden", "true");
-    orbit.append(element("span", "◇", "empty-core"));
-    const steps = element("div", undefined, "empty-steps");
-    steps.append(
-      element("span", "選擇情境"),
-      element("b", "→"),
-      element("span", "驗證斷言"),
-      element("b", "→"),
-      element("span", "追溯證據"),
-    );
-    empty.append(
-      orbit,
-      element("h3", "每個結論，都從證據開始"),
-      element("p", "選擇左側情境，探索預期行為與實際回應。"),
-      steps,
-    );
+    empty.append(element("p", "選擇情境以查看預期行為與測試結果。"));
     $("detail").replaceChildren(empty);
     return;
   }
@@ -283,26 +252,34 @@ function detail() {
   wrap.append(
     element(
       "span",
-      `${result?.status || "未執行"} · ${result?.environment || mode()}`,
+      result?.status || "未執行",
       `result-badge ${result?.status || ""}`,
     ),
     element("h3", scenario.title),
     element("p", scenario.expected),
   );
-  const run = element("button", "▶ 執行此情境", "primary");
+  const run = element("button", "執行此情境", "primary");
   run.disabled = running;
   run.onclick = () => execute([scenario]);
   const actions = element("div", undefined, "detail-run");
-  actions.append(element("small", scenario.id), run);
-  wrap.append(
-    actions,
-    element("h4", "前置條件 / REQUEST BUDGET"),
+  actions.append(run);
+  wrap.append(actions);
+  const technical = element("details", undefined, "technical");
+  technical.append(
+    element("summary", "測試前提與技術資訊"),
     element(
       "p",
-      `${scenario.prerequisites.join("、")} · 最多 ${scenario.requestBudget} 個請求`,
-      "request-budget",
+      `${scenario.id} · ${scenario.prerequisites.join("、")} · 最多 ${scenario.requestBudget} 個請求`,
     ),
   );
+  if (result)
+    technical.append(
+      element(
+        "p",
+        `${result.durationMs} ms · cleanup: ${result.cleanup} · revision ${result.revision}`,
+      ),
+    );
+  wrap.append(technical);
   if (result) {
     if (result.assertions.length) {
       const list = element("ul", undefined, "assertion-list");
@@ -317,7 +294,7 @@ function detail() {
       wrap.append(
         element(
           "h4",
-          `斷言驗證 / ${result.assertions.filter((a) => a.passed).length} OF ${result.assertions.length}`,
+          `斷言驗證（${result.assertions.filter((a) => a.passed).length} / ${result.assertions.length}）`,
         ),
         list,
       );
@@ -330,9 +307,9 @@ function detail() {
       const recommendations = element("ul");
       for (const recommendation of result.recommendations)
         recommendations.append(element("li", recommendation));
-      wrap.append(element("h4", "改善建議 / RECOMMENDATIONS"), recommendations);
+      wrap.append(element("h4", "改善建議"), recommendations);
     }
-    wrap.append(element("h4", `HTTP 證據 / ${result.evidence.length} RECORDS`));
+    wrap.append(element("h4", `HTTP 證據（${result.evidence.length}）`));
     for (const [index, record] of result.evidence.entries()) {
       const item = element("details", undefined, "evidence-item");
       item.open = index === 0;
@@ -347,13 +324,6 @@ function detail() {
     }
     if (!result.evidence.length)
       wrap.append(element("p", "此情境沒有 HTTP 請求，請參閱斷言與測試限制。"));
-    wrap.append(
-      element(
-        "p",
-        `${result.durationMs} ms  ·  cleanup: ${result.cleanup}  ·  revision ${result.revision}`,
-        "result-footnote",
-      ),
-    );
   }
   $("detail").replaceChildren(wrap);
 }
@@ -406,7 +376,7 @@ async function execute(scenarios) {
     }
     $("status").textContent = rateLimited
       ? "目標回報限流，已停止剩餘情境；請等待 Retry-After 再執行。"
-      : `執行完成 · ${currentEnvironment.name} · ${mode()}`;
+      : `執行完成 · ${currentEnvironment.name}`;
   } catch (error) {
     const message = controller.signal.aborted
       ? "已停止；已完成的結果保留，未執行項目不計入。"
@@ -458,12 +428,33 @@ function exportReport(format) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$("filter").onchange = render;
-$("scenario-search").oninput = render;
+function filterScenarios() {
+  const visible = render();
+  if (!visible.some((s) => s.id === selected)) selected = visible[0]?.id;
+  render();
+  detail();
+}
+$("filter").onchange = filterScenarios;
+$("scenario-search").oninput = filterScenarios;
 $("run").onclick = () => execute(catalog);
 $("cancel").onclick = () => controller?.abort();
-$("export-json").onclick = () => exportReport("json");
-$("export-md").onclick = () => exportReport("md");
+for (const [id, format] of [
+  ["export-json", "json"],
+  ["export-md", "md"],
+]) {
+  $(id).onclick = () => {
+    exportReport(format);
+    document.querySelector(".export-menu").open = false;
+  };
+}
+document.addEventListener("click", (event) => {
+  const menu = document.querySelector(".export-menu");
+  if (!menu.contains(event.target)) menu.open = false;
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape")
+    document.querySelector(".export-menu").open = false;
+});
 $("environment-select").onchange = () =>
   selectEnvironment($("environment-select").value).catch(() => {});
 $("environment-new").onclick = () => openEnvironment();
