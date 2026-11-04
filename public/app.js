@@ -21,6 +21,7 @@ async function refreshEnvironments() {
   const response = await fetch("/api/environments");
   if (!response.ok) throw new Error("無法載入環境設定");
   environments = (await response.json()).environments;
+  $("environment-count").textContent = `${environments.length} 個環境`;
   const validGroups = new Set(
     environments.map((profile) => `${profile.id}:${profile.revision}`),
   );
@@ -180,24 +181,44 @@ function element(tag, text, className) {
 }
 function render() {
   $("catalog").replaceChildren();
-  for (const scenario of catalog.filter(
-    (s) => $("filter").value === "all" || s.category === $("filter").value,
-  )) {
+  const needle = $("scenario-search").value.trim().toLowerCase();
+  const visible = catalog.filter(
+    (s) =>
+      ($("filter").value === "all" || s.category === $("filter").value) &&
+      `${s.title} ${s.id} ${s.category} ${s.expected}`
+        .toLowerCase()
+        .includes(needle),
+  );
+  for (const scenario of visible) {
     const button = element(
       "button",
       undefined,
       `scenario${selected === scenario.id ? " selected" : ""}`,
     );
-    const label = element("span");
+    button.setAttribute("aria-pressed", String(selected === scenario.id));
+    const label = element("span", undefined, "case-label");
     label.append(
       element("strong", scenario.title),
       element(
         "small",
-        `${scenario.category.toUpperCase()} / ${scenario.severity.toUpperCase()}`,
+        `${scenario.category.toUpperCase()}  /  ${scenario.severity.toUpperCase()}`,
       ),
     );
     const status = results.get(scenario.id)?.status || "未執行";
-    button.append(label, element("span", status, `result ${status}`));
+    const icon =
+      { OAuth: "↗", Session: "⌁", JWT: "◇", Browser: "◎", Service: "⌘" }[
+        scenario.category
+      ] || "◈";
+    const symbol = element("span", icon, "case-symbol");
+    symbol.setAttribute("aria-hidden", "true");
+    const arrow = element("span", "›", "case-arrow");
+    arrow.setAttribute("aria-hidden", "true");
+    button.append(
+      symbol,
+      label,
+      element("span", status, `result ${status}`),
+      arrow,
+    );
     button.onclick = () => {
       selected = scenario.id;
       render();
@@ -205,6 +226,15 @@ function render() {
     };
     $("catalog").append(button);
   }
+  if (!visible.length)
+    $("catalog").append(
+      element(
+        "div",
+        "找不到符合的情境，試試其他關鍵字或分類。",
+        "catalog-empty",
+      ),
+    );
+  $("visible-count").textContent = `${visible.length} 個情境`;
   const values = [...results.values()];
   $("total").textContent = values.length;
   $("pass").textContent = values.filter((r) => r.status === "PASS").length;
@@ -214,74 +244,116 @@ function render() {
   $("inconclusive").textContent = values.filter(
     (r) => r.status === "INCONCLUSIVE",
   ).length;
+  $("coverage-progress").max = catalog.length || 1;
+  $("coverage-progress").value = values.length;
+  $("coverage-label").textContent =
+    `${values.length} / ${catalog.length} 已完成`;
+  $("runner-status").textContent = running ? "RUNNING" : "RUNNER READY";
+  $("runner-status").dataset.state = running ? "running" : "ready";
   $("export-json").disabled = $("export-md").disabled =
     running || !values.length;
 }
 function detail() {
   const scenario = catalog.find((s) => s.id === selected);
   if (!scenario) {
-    $("detail").replaceChildren(
-      element("div", "選擇情境，檢視此環境的測試結果與證據。", "empty"),
+    const empty = element("div", undefined, "empty");
+    const orbit = element("div", undefined, "empty-orbit");
+    orbit.setAttribute("aria-hidden", "true");
+    orbit.append(element("span", "◇", "empty-core"));
+    const steps = element("div", undefined, "empty-steps");
+    steps.append(
+      element("span", "選擇情境"),
+      element("b", "→"),
+      element("span", "驗證斷言"),
+      element("b", "→"),
+      element("span", "追溯證據"),
     );
+    empty.append(
+      orbit,
+      element("h3", "每個結論，都從證據開始"),
+      element("p", "選擇左側情境，探索預期行為與實際回應。"),
+      steps,
+    );
+    $("detail").replaceChildren(empty);
     return;
   }
   const result = results.get(selected);
   const wrap = element("div", undefined, "detail-content");
   wrap.append(
-    element("h3", scenario.title),
-    element("p", scenario.expected),
     element(
       "span",
       `${result?.status || "未執行"} · ${result?.environment || mode()}`,
-      result?.status || "tag",
+      `result-badge ${result?.status || ""}`,
     ),
+    element("h3", scenario.title),
+    element("p", scenario.expected),
   );
+  const run = element("button", "▶ 執行此情境", "primary");
+  run.disabled = running;
+  run.onclick = () => execute([scenario]);
+  const actions = element("div", undefined, "detail-run");
+  actions.append(element("small", scenario.id), run);
   wrap.append(
-    element("h4", "PREREQUISITES / REQUEST BUDGET"),
+    actions,
+    element("h4", "前置條件 / REQUEST BUDGET"),
     element(
       "p",
       `${scenario.prerequisites.join("、")} · 最多 ${scenario.requestBudget} 個請求`,
+      "request-budget",
     ),
   );
   if (result) {
-    const list = element("ul");
-    for (const assertion of result.assertions)
-      list.append(
+    if (result.assertions.length) {
+      const list = element("ul", undefined, "assertion-list");
+      for (const assertion of result.assertions)
+        list.append(
+          element(
+            "li",
+            `${assertion.passed ? "✓" : "✕"}  ${assertion.name}`,
+            assertion.passed ? "PASS" : "FAIL",
+          ),
+        );
+      wrap.append(
         element(
-          "li",
-          `${assertion.passed ? "✓" : "✕"} ${assertion.name}`,
-          assertion.passed ? "PASS" : "FAIL",
+          "h4",
+          `斷言驗證 / ${result.assertions.filter((a) => a.passed).length} OF ${result.assertions.length}`,
         ),
+        list,
       );
-    wrap.append(list);
+    }
     if (result.limitation || result.error)
-      wrap.append(element("p", result.limitation || result.error));
+      wrap.append(
+        element("p", result.limitation || result.error, "result-note"),
+      );
     if (result.recommendations?.length) {
       const recommendations = element("ul");
       for (const recommendation of result.recommendations)
         recommendations.append(element("li", recommendation));
-      wrap.append(element("h4", "RECOMMENDATIONS / 建議事項"), recommendations);
+      wrap.append(element("h4", "改善建議 / RECOMMENDATIONS"), recommendations);
     }
-    wrap.append(
-      element("h4", "REDACTED HTTP EVIDENCE"),
-      element(
-        "pre",
-        result.evidence.length
-          ? JSON.stringify(result.evidence, null, 2)
-          : "此情境無 HTTP 請求；請參閱斷言與限制。",
-      ),
-    );
+    wrap.append(element("h4", `HTTP 證據 / ${result.evidence.length} RECORDS`));
+    for (const [index, record] of result.evidence.entries()) {
+      const item = element("details", undefined, "evidence-item");
+      item.open = index === 0;
+      const summary = element("summary");
+      summary.append(
+        element("strong", record.request.method),
+        element("code", String(record.response.status)),
+        element("span", record.request.path || record.request.url),
+      );
+      item.append(summary, element("pre", JSON.stringify(record, null, 2)));
+      wrap.append(item);
+    }
+    if (!result.evidence.length)
+      wrap.append(element("p", "此情境沒有 HTTP 請求，請參閱斷言與測試限制。"));
     wrap.append(
       element(
         "p",
-        `${result.durationMs} ms · cleanup: ${result.cleanup} · revision ${result.revision}`,
+        `${result.durationMs} ms  ·  cleanup: ${result.cleanup}  ·  revision ${result.revision}`,
+        "result-footnote",
       ),
     );
   }
-  const run = element("button", "▶ 執行此情境", "primary");
-  run.disabled = running;
-  run.onclick = () => execute([scenario]);
-  wrap.append(run);
   $("detail").replaceChildren(wrap);
 }
 function log(text) {
@@ -386,6 +458,7 @@ function exportReport(format) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 $("filter").onchange = render;
+$("scenario-search").oninput = render;
 $("run").onclick = () => execute(catalog);
 $("cancel").onclick = () => controller?.abort();
 $("export-json").onclick = () => exportReport("json");
