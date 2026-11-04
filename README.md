@@ -37,7 +37,9 @@ npm run test:browser
 
 ## 防禦驗證與攻擊模擬
 
-保留原有防禦驗證，透過「模式」切換攻擊者視角。攻擊模式第一版可輸入測試用 client secret，透過 OIDC discovery 嘗試取得 client credentials token，再以未登入對照確認能否讀取指定資源；結果顯示操作成功／被阻擋／待確認。憑證不存進環境設定或報告。
+保留原有防禦驗證，透過「模式」切換攻擊者視角。攻擊模式有 10 個可執行情境，涵蓋 client secret、access token、refresh token、授權碼重播與 PKCE。**環境只選目標，參數在各情境右側表單獨立填寫**；不共用憑證，也不自動沿用環境的 client ID。
+
+選擇情境、填參數後按「執行此情境」。更改參數只清除該情境結果，草稿與憑證不存入環境設定或報告。
 
 操作、OIDC 支援範圍與情境擴充方式見 [攻擊模式](docs/ATTACK_MODE.md)。這不是完整 OIDC conformance 或使用者冒用驗證。
 

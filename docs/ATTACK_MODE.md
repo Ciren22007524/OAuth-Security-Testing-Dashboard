@@ -1,44 +1,59 @@
-# 模式與攻擊者能力模擬
+# 攻擊情境與各自的參數
 
-環境與模式是兩個獨立選項：環境決定請求送到本地模擬或自訂 HTTP 服務；模式決定要驗證防禦控制，還是觀察攻擊者持有特定資料後的能力。
+模式分為防禦驗證與攻擊模擬。防禦模式保留既有 23 個模擬／10 個 HTTP 情境；攻擊模式提供下面 10 個可執行 use case。
 
-| 模式 | 操作與結果 |
-| --- | --- |
-| 防禦驗證（預設） | 原有 23 個隔離模擬／10 個 HTTP 情境；PASS、FAIL、INCONCLUSIVE、ERROR 的語意不變。 |
-| 攻擊模擬 | 第一版模擬持有 client secret，記錄 SUCCEEDED（操作成功）、BLOCKED（本次請求被拒絕）、INCONCLUSIVE（證據不足／不適用）、ERROR（執行錯誤）。 |
+**環境只選目標；攻擊參數填在右側的個別情境表單。** 不再使用共用憑證面板，也不沿用環境中防禦驗證用的 client ID、Origin 或 redirect URI。
 
-攻擊成功表示完成了該操作，應依實際授權政策判讀影響。Client credentials 本來就可能允許 client 取得自己的 token；這本身不是使用者冒用或越權證據。
+## 操作流程
 
-## 操作
+1. 在 header 選擇模擬或 HTTP 目標，再切到「攻擊模擬」。
+2. 選一個情境，在右側填入該情境需要的憑證、路徑與對照參數；端點與認證方式可展開設定。
+3. 按「執行此情境」。攻擊模式不提供共用參數的「執行全部」，避免把不同憑證誤用在其他情境。
+4. 切換情境時各自保留目前分頁的草稿與結果；改參數只清除此情境的舊結果。切換目標或離開攻擊模式會清除全部攻擊草稿與結果。
+5. 檢視能力觀察、對照與已遮罩的 HTTP 證據，依需要匯出報告。
 
-1. 在 header 選擇環境。第一次可用「本地模擬」，不會連線到外部服務。
-2. 把「模式」切成「攻擊模擬」，點「持有的憑證」。
-3. 本地模擬可留白，會使用公開的 `demo-client`／`demo-secret`，允許 `read` scope，資源路徑預設 `/resource`。輸入錯誤 secret 或 `admin` scope 可觀察被阻擋的結果。
-4. HTTP 環境填入測試用 client ID 與 client secret；ID 可沿用環境已登記的設定。選填 scope 與要讀取的資源路徑。
-5. 執行單項或全部情境，檢視能力觀察、HTTP 狀態與已遮罩的證據，依需要匯出報告。
+HTTP 模式中 `*` 是該情境的必填欄位。公開 client 的授權碼／refresh 情境可在進階設定明確選擇 `none`，不附 secret；預設依 discovery 選擇 Basic 或 POST 認證。
 
-## 第一版情境
+## 10 個 use case
 
-- **取得 access token**：讀取目前目標的 `/.well-known/openid-configuration`，使用宣告的 token endpoint，以 `client_credentials` 嘗試取得 Bearer access token。預設先選 `client_secret_basic`，其次 `client_secret_post`。Discovery 不支援這兩種認證時，不送出 secret。
-- **讀取指定資源**：先送出未附憑證的 GET 對照，確認回 401／403，再取得 token 並帶 Bearer 重試一次 GET。公開資源或 404／5xx 等不明對照會標為待確認，避免把公開存取算成 secret 帶來的能力。
+| 情境 | 個別輸入 | 實際操作與判讀 |
+| --- | --- | --- |
+| Secret 取得 token | client ID、secret、選填 scope | 以 client_credentials 換取 Bearer token。 |
+| Secret 讀取受保護資源 | client ID、secret、scope、資源路徑 | 未附憑證對照回 401／403 後，再取得 token 讀取同一路徑。 |
+| Secret 擴大 scope | client ID、secret、已知 scope、欲擴大 scope | 對照 token 先成功，再確認第二次實際宣告新增 scope；是否超出授權須對照 client 政策。 |
+| Access token 讀資源 | access token、資源路徑 | 比較未附憑證與附 Bearer 的 GET 結果。 |
+| Access token 取得 UserInfo | access token、選填 UserInfo 路徑 | 對照後檢查回應是否為含 sub 的 JSON，不保存個人資料。 |
+| Refresh token 換發 | client ID、refresh token、選填 secret／scope | 以 refresh_token grant 嘗試換取新 token，可能輪替原 refresh token。 |
+| 舊 refresh token 重用 | 同上 | 首次兌換成功後重送同一枚舊 token，觀察是否仍可用。 |
+| 授權碼交換 | client ID、code、對應 redirect URI、選填 verifier／secret | 以 authorization_code grant 兌換；成功會消耗授權碼。 |
+| 授權碼重播 | 同上 | 首次兌換成功後，原樣重送同一授權碼。 |
+| 省略 PKCE verifier | client ID、PKCE code、對應 redirect URI、原始 verifier、選填 secret | 先省略 verifier；被拒後再補正確 verifier，確認授權碼本身可用。 |
 
-Token 情境最多 2 個請求；資源情境最多 4 個。只有 token 交換使用 POST；資源存取只做 GET。HTTP 請求間隔至少 500ms、每次逾時 5 秒、回應上限 64KiB，遇到 429 停止並依 Retry-After 等待。重新導向不跟隨。
+每項最多 2～4 個請求；需要 token 或 UserInfo discovery 時使用 `/.well-known/openid-configuration`。同一情境的 discovery 會共用一次，不會為重播重讀 metadata。HTTP 請求至少間隔 500ms、逾時 5 秒、回應上限 64KiB。遇到 429 停止並等待，不跟隨重新導向。
 
-## OIDC 的界線
+## 有效對照與結果語意
 
-OIDC 不保證支援 `client_credentials`，client secret 也不代表使用者 session。`unsupported_grant_type` 等標準拒絕會顯示本次操作被阻擋；不因此宣稱 provider 有漏洞或所有路徑安全。收到 `id_token` 只記錄是否存在，不驗證其簽章，也不宣稱已完成使用者登入。
+- `SUCCEEDED`：攻擊者完成了該項操作。
+- `BLOCKED`：本次操作被標準錯誤或拒絕回應阻擋；重播類情境須有首次成功兌換的對照。
+- `INCONCLUSIVE`：缺參數、回應不明或對照不成立。過期 code、無效 refresh token、公開資源不會被誤報為已證明安全。
+- `ERROR`：連線、回應大小、取消或執行錯誤。
 
-目前 token 與資源端點須與所選環境同 origin，不會將憑證轉送到 discovery 指向的其他主機。若 issuer 使用 realm／租戶路徑，可直接指定 `/realms/example/protocol/openid-connect/token` 之類的 token 路徑，並指定認證方式；不填 token 路徑才讀取根目錄 discovery。外部 resource server、不同 origin 的 issuer、JSON 自訂 token API、mTLS、private_key_jwt 尚未支援。
+操作成功不自動等於漏洞。例如 client 原本可能允許 admin scope，refresh 重用也可能符合寬限設計；必須依實際政策判讀。省略 verifier 仍成功時，報告會提醒確認該 code 原始授權確實綁定 PKCE。這裡不會從 client secret 推定使用者登入，也不驗證 ID token 簽章。
 
-尚未加入持有 authorization code、PKCE verifier、使用者 access／refresh token、session cookie 的操作，也沒有真正竊取憑證、瀏覽器 CSRF／CORS 或完整 OIDC conformance 驗證。
+## 本地模擬
 
-## 憑證與結果
+每個情境使用自己的隔離 fixture，參數可留白使用該情境的示範資料：`demo-client`／`demo-secret`、`demo-access-token`、`demo-refresh-token`、`demo-code`，redirect 為 `https://app.example.test/callback`。PKCE verifier 是 `demo-verifier-` 後補 `v` 至 43 字元。模擬 scope 為 `read`，資源為 `/resource`，UserInfo 為 `/userinfo`；scope 擴大預設嘗試 `admin`。
 
-- 憑證只在目前分頁輸入欄位與當次請求中使用；不寫入環境 JSON、sessionStorage、執行紀錄或匯出報告。後端不保存拿到的 token，也不回傳完整資源內容。
-- 切換環境、離開攻擊模式或手動清除會清除 secret；重新整理回到預設防禦模式，不恢復憑證。
-- 修改憑證、scope、認證方式或路徑會清空舊攻擊結果；防禦結果依環境與設定版本保留，不混入攻擊結果。
-- 攻擊報告以 `-attack-report` 區分；包含模式、結果與已遮罩的能力證據。成功簽發的 token 未自動撤銷，會依目標自身的有效期與管理機制處理。
+預設模擬會阻擋 scope 擴大、授權碼重播、refresh 重用及省略 verifier，其餘六項可操作成功。測試另以獨立、刻意放寬控制的 fixture 確認這四種攻擊也能被識別為成功，不是固定顯示「被阻擋」。fixture 的放寬開關不開放給 dashboard API。
 
-## 擴充程式
+## 憑證、資料與副作用
 
-模式註冊在 `src/application.js`；防禦情境分別由 `src/simulation-scenarios.js` 與 `src/http-scenarios.js` 的 handler 註冊表派送，保留原有請求、斷言與 fixture。攻擊情境在 `src/attack-runner.js`，獨立使用 `src/attack-fixture.js`；不以改寫防禦結果或反轉 PASS／FAIL 模擬攻擊。
+所有情境的 secret、access／refresh token、code、verifier 只留在目前分頁草稿與當次請求；不進環境 JSON、browser storage、紀錄或報告。後端不回傳原始 token、Cookie 或使用者資料，證據只含已遮罩的請求與回應摘要。報告以 `-attack-report` 命名。
+
+兌換可能消耗 code、輪替 refresh token，重播也可能導致 provider 撤銷整個 token family；各情境表單會顯示這些具體影響。工具不保存新憑證，也未自動撤銷已簽發 token，其效期由目標管理。
+
+## 支援界線與程式架構
+
+所有端點限於所選目標同 origin。多租戶 provider 可在個別情境直接指定 token 路徑，例如 `/realms/example/protocol/openid-connect/token`，並指定認證方式。不同 origin 的 resource server、mTLS、private_key_jwt、session cookie、真正瀏覽器 CSRF／CORS、nonce 與完整 OIDC conformance 尚未加入；沒有對正式 Google 或其他 provider 執行驗收。
+
+欄位與必填條件在 `src/attack-catalog.js`；個別操作在 `src/attack-scenarios.js` 的 handler 註冊表；傳輸、節流、取消與遮罩在 `src/attack-runner.js`；fixture 在 `src/attack-fixture.js`。前端根據 catalog schema 生成每個情境的表單，後端也依同一 schema 拒絕不屬於該情境的欄位。

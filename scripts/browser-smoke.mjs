@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dashboardServer } from "../src/server.js";
 import { catalog } from "../src/runner.js";
+import { attackCatalog } from "../src/attack-runner.js";
 import { createFixture } from "../src/fixture.js";
 const scenarioCount = catalog.length;
 const passCount = scenarioCount - 1;
@@ -519,22 +520,62 @@ try {
     "document.getElementById('testing-mode').value='attack';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
   );
   await wait(
-    "document.querySelectorAll('.scenario').length===2 && !document.getElementById('run').disabled",
+    `document.querySelectorAll('.scenario').length===${attackCatalog.length} && !document.getElementById('run').disabled`,
   );
   if (
     !(await evaluate(
-      "document.getElementById('total').textContent==='0' && document.getElementById('pass-label').textContent==='操作成功'",
+      "document.getElementById('total').textContent==='0' && document.getElementById('pass-label').textContent==='操作成功' && document.getElementById('run').hidden && !document.getElementById('attack-open')",
     ))
   )
-    throw Error("Attack mode mixed defense results or labels");
-  await evaluate(
-    "document.getElementById('attack-open').click();document.getElementById('attack-client').value='demo-client';document.getElementById('attack-secret').value='demo-secret';document.getElementById('attack-scope').value='read';document.getElementById('attack-secret').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('attack-form').requestSubmit();document.getElementById('run').click()",
-  );
+    throw Error("Attack mode still has global credential controls");
+  const chooseAttack = async (id) => {
+    const index = attackCatalog.findIndex((s) => s.id === id);
+    await evaluate(`document.querySelectorAll('.scenario')[${index}].click()`);
+  };
+  const setAttack = async (key, value) =>
+    evaluate(
+      `document.querySelector('[data-parameter="${key}"]').value=${JSON.stringify(value)};document.querySelector('[data-parameter="${key}"]').dispatchEvent(new Event('input',{bubbles:true}))`,
+    );
+  await setAttack("clientId", "demo-client");
+  await setAttack("clientSecret", "demo-secret");
+  await evaluate("document.getElementById('scenario-run').click()");
   await wait(
-    "document.getElementById('total').textContent==='2' && !document.getElementById('run').disabled",
+    "document.getElementById('total').textContent==='1' && document.getElementById('cancel').disabled",
   );
-  if ((await evaluate("document.getElementById('pass').textContent")) !== "2")
-    throw Error("Attack fixture capabilities not demonstrated");
+  await chooseAttack("secret-resource");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientSecret').value==='' && document.getElementById('attack-clientId').value===''",
+    ))
+  )
+    throw Error("Credentials leaked across scenario forms");
+  for (let index = 1; index < attackCatalog.length; index++) {
+    await chooseAttack(attackCatalog[index].id);
+    await evaluate("document.getElementById('scenario-run').click()");
+    await wait(
+      `document.getElementById('total').textContent==='${index + 1}' && document.getElementById('cancel').disabled`,
+    );
+  }
+  if (
+    !(await evaluate(
+      "document.getElementById('pass').textContent==='6' && document.getElementById('fail').textContent==='4' && document.getElementById('inconclusive').textContent==='0'",
+    ))
+  )
+    throw Error("Ten attack scenarios produced unexpected outcomes");
+  await chooseAttack("token-resource");
+  if (
+    !(await evaluate(
+      "!document.getElementById('attack-clientSecret') && document.getElementById('attack-accessToken') && document.getElementById('attack-resourcePath')",
+    ))
+  )
+    throw Error("Access-token case shows irrelevant secret parameters");
+  await chooseAttack("secret-token");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientSecret').value==='demo-secret'",
+    ))
+  )
+    throw Error("Scenario draft was not restored");
   await evaluate(
     "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
   );
@@ -554,17 +595,18 @@ try {
   }
   if (
     attackReport?.testingMode !== "attack" ||
-    attackReport.results.length !== 2 ||
-    /demo-secret|demo-access-token/.test(JSON.stringify(attackReport))
+    attackReport.results.length !== 10 ||
+    /demo-secret|demo-access-token|demo-issued-|demo-refresh-token|demo-code|demo-private-user/.test(
+      JSON.stringify(attackReport),
+    )
   )
-    throw Error("Attack report leaked credentials or lacked mode");
+    throw Error("Attack report leaked per-case credentials or user data");
   await call("Emulation.setDeviceMetricsOverride", {
     width: 1440,
     height: 1100,
     deviceScaleFactor: 1,
     mobile: false,
   });
-  await evaluate("document.querySelector('.scenario').click()");
   await writeFile(
     join(work, "attack-desktop.png"),
     Buffer.from(
@@ -572,15 +614,47 @@ try {
       "base64",
     ),
   );
-  await evaluate(
-    "document.getElementById('attack-open').click();document.getElementById('attack-secret').value='incorrect-secret';document.getElementById('attack-secret').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('attack-form').requestSubmit()",
-  );
-  if ((await evaluate("document.getElementById('total').textContent")) !== "0")
-    throw Error("Changed attacker credentials retained stale results");
-  await evaluate("document.querySelector('#detail button').click()");
+  await setAttack("clientSecret", "incorrect-secret");
+  if ((await evaluate("document.getElementById('total').textContent")) !== "9")
+    throw Error(
+      "Changing one case cleared other results or retained stale result",
+    );
+  await evaluate("document.getElementById('scenario-run').click()");
   await wait(
-    "document.getElementById('fail').textContent==='1' && !document.getElementById('run').disabled",
+    "document.getElementById('fail').textContent==='5' && document.getElementById('cancel').disabled",
   );
+  // Environment supplies a target only; its client ID never prepopulates attack cases.
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
+  await evaluate(
+    `document.getElementById('profile-name').value='Case isolation target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-client').value='environment-client-only';document.getElementById('environment-form').requestSubmit()`,
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
+  );
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientId').value==='' && document.getElementById('attack-clientSecret').value==='' && document.getElementById('total').textContent==='0'",
+    ))
+  )
+    throw Error("Environment configuration leaked into per-scenario inputs");
+  await evaluate("document.getElementById('scenario-run').click()");
+  if (
+    !(await evaluate(
+      "!document.getElementById('attack-clientId').validity.valid && document.getElementById('total').textContent==='0'",
+    ))
+  )
+    throw Error("Missing per-scenario required inputs executed a test");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-edit').click();document.getElementById('environment-delete').click()",
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-select').value==='local'",
+  );
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  await setAttack("clientSecret", "clear-on-mode-change");
   await evaluate(
     "document.getElementById('testing-mode').value='defense';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
   );
@@ -588,13 +662,22 @@ try {
     `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('run').disabled`,
   );
   if (
+    (await evaluate("document.getElementById('total').textContent")) !==
+    defenseTotal
+  )
+    throw Error("Defense results changed");
+  await evaluate(
+    "document.getElementById('testing-mode').value='attack';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${attackCatalog.length} && !document.getElementById('testing-mode').disabled`,
+  );
+  if (
     !(await evaluate(
-      `document.getElementById('total').textContent===${JSON.stringify(defenseTotal)} && document.getElementById('attack-secret').value===''`,
+      "document.getElementById('attack-clientSecret').value===''",
     ))
   )
-    throw Error(
-      "Mode switch did not preserve defense results and clear secret",
-    );
+    throw Error("Mode change retained scenario secrets");
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({

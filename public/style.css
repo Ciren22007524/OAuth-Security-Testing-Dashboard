@@ -525,3 +525,59 @@ dialog::backdrop {
 .result-badge.BLOCKED {
   color: #93c5fd;
 }
+
+.scenario-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.scenario-form > h4,
+.scenario-form > p {
+  grid-column: 1 / -1;
+  margin: 4px 0;
+}
+.scenario-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  min-width: 0;
+}
+.scenario-form input,
+.scenario-form select {
+  width: 100%;
+  min-width: 0;
+}
+.detail-run {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+@media (max-width: 1000px) {
+  .scenario-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scenario-advanced {
+  grid-column: 1 / -1;
+  border-block: 1px solid #29374c;
+  font-size: 13px;
+}
+.advanced-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 10px 0;
+}
+.advanced-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .advanced-fields {
+    grid-template-columns: 1fr;
+  }
+}
