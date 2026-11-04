@@ -111,6 +111,19 @@ try {
     `document.querySelectorAll('.scenario').length===${scenarioCount}`,
   );
   await evaluate(
+    "document.getElementById('scenario-search').value='callback';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
+  );
+  if ((await evaluate("document.querySelectorAll('.scenario').length")) !== 2)
+    throw Error("Scenario search failed");
+  await evaluate(
+    "document.getElementById('scenario-search').value='no-such-scenario';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
+  );
+  if (!(await evaluate("document.querySelector('.catalog-empty')!==null")))
+    throw Error("Search empty state missing");
+  await evaluate(
+    "document.getElementById('scenario-search').value='';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
+  );
+  await evaluate(
     "document.getElementById('filter').value='JWT';document.getElementById('filter').dispatchEvent(new Event('change'))",
   );
   if (
@@ -175,6 +188,12 @@ try {
     if (!text.includes("SIMULATION")) throw Error("Missing report environment");
   }
   await evaluate("document.querySelector('.scenario').click()");
+  if (!(await evaluate("document.querySelector('.evidence-item')?.open")))
+    throw Error("Evidence disclosure missing");
+  await evaluate("document.querySelector('.evidence-item summary').click()");
+  if (await evaluate("document.querySelector('.evidence-item').open"))
+    throw Error("Evidence did not collapse");
+  await evaluate("document.querySelector('.evidence-item summary').click()");
   await writeFile(
     join(work, "desktop.png"),
     Buffer.from(
@@ -321,6 +340,8 @@ try {
       stats,
       checks: [
         "filter",
+        "scenario search and empty state",
+        "expandable HTTP evidence",
         "single run",
         "all scenarios",
         "JSON download",
@@ -348,5 +369,10 @@ try {
   }
   await new Promise((r) => server.close(r));
   await httpTarget.close();
-  await rm(profile, { recursive: true, force: true });
+  await rm(profile, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  });
 }
