@@ -57,6 +57,7 @@ async function selectEnvironment(id) {
     if (!resultGroups.has(key)) resultGroups.set(key, new Map());
     results = resultGroups.get(key);
     selected = catalog[0]?.id;
+    displayedScenario = undefined;
     $("scenario-search").value = "";
     $("filter").replaceChildren(
       element("option", "所有分類"),
@@ -178,6 +179,7 @@ async function saveEnvironment(remove = false) {
   }
 }
 let selected;
+let displayedScenario;
 let controller;
 let running = false;
 function element(tag, text, className) {
@@ -326,6 +328,10 @@ function detail() {
       wrap.append(element("p", "此情境沒有 HTTP 請求，請參閱斷言與測試限制。"));
   }
   $("detail").replaceChildren(wrap);
+  if (displayedScenario !== selected) {
+    $("detail").parentElement.scrollTop = 0;
+    displayedScenario = selected;
+  }
 }
 function log(text) {
   $("console").textContent += `\n[${new Date().toLocaleTimeString()}] ${text}`;
