@@ -1,4 +1,21 @@
 const definitions = {
+  resource: {
+    label: "API resource origin（選填；client 需允許 api scope）",
+    type: "url",
+    placeholder: "例如 https://array.cirenjhong.com",
+    maxLength: 1024,
+  },
+  successField: {
+    label: "成功資料的識別欄位",
+    placeholder: "例如 user.id、data.id 或 message",
+    maxLength: 200,
+  },
+  sessionCookie: {
+    label: "Array 本站 session cookie 的值",
+    type: "password",
+    placeholder: "僅填 __Host-array_sso_session 的值",
+    maxLength: 128,
+  },
   clientId: {
     maxLength: 200,
     label: "Client ID",
@@ -79,8 +96,8 @@ const scenarios = [
     title: "持有 client secret：讀取受保護資源",
     category: "Client secret",
     expected: "先確認未附憑證回 401／403，再取得 token 比較指定資源是否可讀。",
-    fields: [...tokenFields, "scope", "resourcePath"],
-    required: ["clientId", "clientSecret", "resourcePath"],
+    fields: [...tokenFields, "scope", "resourcePath", "successField"],
+    required: ["clientId", "clientSecret", "resourcePath", "successField"],
     requestBudget: 4,
   },
   {
@@ -99,8 +116,8 @@ const scenarios = [
     category: "Access token",
     expected:
       "比較未附憑證與附上此 token 的 GET 回應，確認持有者能否讀取指定路徑。",
-    fields: ["accessToken", "resourcePath"],
-    required: ["accessToken", "resourcePath"],
+    fields: ["accessToken", "resourcePath", "successField"],
+    required: ["accessToken", "resourcePath", "successField"],
     requestBudget: 2,
   },
   {
@@ -118,7 +135,7 @@ const scenarios = [
     title: "持有 refresh token：換取新 access token",
     category: "Refresh token",
     expected: "使用這枚 refresh token、client 與選填 secret 嘗試更新 token。",
-    fields: [...tokenFields, "refreshToken", "scope"],
+    fields: [...tokenFields, "refreshToken", "scope", "resource"],
     required: ["clientId", "refreshToken"],
     requestBudget: 2,
     impact: "可能輪替提供的 refresh token；新 token 不會保留。",
@@ -129,7 +146,7 @@ const scenarios = [
     category: "Refresh token",
     expected:
       "先成功兌換，再重送同一枚舊 refresh token；初次兌換失敗不算已證明重用防護。",
-    fields: [...tokenFields, "refreshToken", "scope"],
+    fields: [...tokenFields, "refreshToken", "scope", "resource"],
     required: ["clientId", "refreshToken"],
     requestBudget: 3,
     impact:
@@ -141,7 +158,7 @@ const scenarios = [
     category: "授權碼／PKCE",
     expected:
       "使用授權碼、對應 redirect URI 與選填 verifier／secret 兌換 token。",
-    fields: [...tokenFields, "code", "redirectUri", "codeVerifier"],
+    fields: [...tokenFields, "code", "redirectUri", "codeVerifier", "resource"],
     required: ["clientId", "code", "redirectUri"],
     requestBudget: 2,
     impact: "成功交換會消耗這枚授權碼。",
@@ -152,7 +169,7 @@ const scenarios = [
     category: "授權碼／PKCE",
     expected:
       "先證明這枚授權碼可用，再以相同參數重送；只在有效對照成立後判讀重播是否成功。",
-    fields: [...tokenFields, "code", "redirectUri", "codeVerifier"],
+    fields: [...tokenFields, "code", "redirectUri", "codeVerifier", "resource"],
     required: ["clientId", "code", "redirectUri"],
     requestBudget: 3,
     impact: "會消耗授權碼並重送一次；provider 可能撤銷相關 token。",
@@ -163,12 +180,57 @@ const scenarios = [
     category: "授權碼／PKCE",
     expected:
       "先省略 verifier；若被拒絕，再使用原始 verifier 驗證授權碼本身有效。",
-    fields: [...tokenFields, "code", "redirectUri", "codeVerifier"],
+    fields: [...tokenFields, "code", "redirectUri", "codeVerifier", "resource"],
     required: ["clientId", "code", "redirectUri", "codeVerifier"],
     requestBudget: 3,
     impact: "請使用原本綁定 PKCE 的授權碼；成功交換會消耗它。",
   },
 ];
+const arrayScenarios = [
+  {
+    id: "array-no-session",
+    title: "未持有 session：嘗試讀取 Array 身分",
+    required: [],
+    fields: [],
+    requestBudget: 1,
+  },
+  {
+    id: "array-forged-session",
+    title: "偽造本站 session：嘗試讀取 Array 身分",
+    required: [],
+    fields: [],
+    requestBudget: 1,
+  },
+  {
+    id: "array-held-session",
+    title: "持有本站 session：讀取 Array 身分",
+    required: ["sessionCookie"],
+    fields: ["sessionCookie"],
+    requestBudget: 2,
+  },
+].map((s) => ({
+  ...s,
+  category: "Array session",
+  expected:
+    "依 /api/me 的 JSON user.sub 與有效 expiresAt 判讀；首頁或 WAF 的 200 HTML 不算成功。",
+  revision: 1,
+  testingMode: "attack",
+  prerequisites: s.required.map((k) => definitions[k].label),
+  fields: s.fields.map((key) => ({
+    key,
+    ...definitions[key],
+    required: true,
+    maxLength: definitions[key].maxLength,
+  })),
+}));
+export const arrayAttackCatalog = arrayScenarios;
+export function getAttackCatalog(environment) {
+  if (environment.type === "simulation") return attackCatalog;
+  if (environment.protocol === "array-session") return arrayAttackCatalog;
+  if (environment.protocol === "auth-service-oidc")
+    return attackCatalog.filter((s) => s.category !== "Client secret");
+  return attackCatalog;
+}
 export const attackCatalog = scenarios.map((s) => ({
   ...s,
   revision: 2,
@@ -190,7 +252,8 @@ export const attackCatalog = scenarios.map((s) => ({
 }));
 const paths = new Set(["tokenPath", "resourcePath", "userinfoPath"]);
 export function validateAttackInput(input = {}, id) {
-  const scenario = id && attackCatalog.find((s) => s.id === id);
+  const scenario =
+    id && [...attackCatalog, ...arrayAttackCatalog].find((s) => s.id === id);
   const fields = scenario
     ? scenario.fields.map((f) => f.key)
     : Object.keys(definitions);
@@ -218,17 +281,31 @@ export function validateAttackInput(input = {}, id) {
       )
         throw new Error("Invalid endpoint path");
     }
-    if (key === "redirectUri" && value) {
+    if ((key === "redirectUri" || key === "resource") && value) {
       const url = new URL(value);
       if (
         !["https:", "http:"].includes(url.protocol) ||
         url.username ||
         url.password ||
-        url.hash
+        url.hash ||
+        (key === "resource" && url.href !== url.origin + "/")
       )
         throw new Error("Invalid redirect URI");
     }
   }
+  if (
+    input.sessionCookie &&
+    !/^[A-Za-z0-9_-]{32,128}$/.test(input.sessionCookie)
+  )
+    throw new Error("Invalid session cookie");
+  if (
+    input.successField &&
+    (!/^[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)*$/.test(input.successField) ||
+      input.successField
+        .split(".")
+        .some((k) => ["__proto__", "constructor", "prototype"].includes(k)))
+  )
+    throw new Error("Invalid success field");
   if (
     input.authMethod &&
     !(
@@ -251,8 +328,11 @@ export function demoSettings(id) {
     baselineScope: "read",
     elevatedScope: "admin",
     resourcePath: "/resource",
+    successField: "message",
   };
-  const scenario = attackCatalog.find((s) => s.id === id);
+  const scenario = [...attackCatalog, ...arrayAttackCatalog].find(
+    (s) => s.id === id,
+  );
   return Object.fromEntries(
     scenario.fields.filter((f) => all[f.key]).map((f) => [f.key, all[f.key]]),
   );

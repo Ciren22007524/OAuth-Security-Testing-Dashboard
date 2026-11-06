@@ -158,6 +158,17 @@
           >
           <div id="http-profile-fields">
             <label
+              >服務協定<select id="profile-protocol">
+                <option value="auth-service-oidc">
+                  auth-service（標準 OIDC／RS256）
+                </option>
+                <option value="array-session">
+                  Array SSO Worker（本站 session）
+                </option>
+                <option value="legacy">舊版 JSON／ES256（相容舊設定）</option>
+              </select></label
+            >
+            <label
               >服務基底網址<input
                 id="profile-url"
                 type="url"

@@ -94,6 +94,7 @@ test("standard OIDC discovery and both secret authentication methods work agains
       clientSecret: DEMO_SECRET,
       scope: "read",
       resourcePath: "/resource",
+      successField: "message",
       authMethod,
     });
     assert.equal(result.status, "SUCCEEDED");
@@ -128,6 +129,7 @@ test("missing credentials or resource path sends no request and public resource 
     clientId: "x",
     clientSecret: "private-secret",
     resourcePath: "/public",
+    successField: "public",
   });
   assert.equal(result.status, "INCONCLUSIVE");
   assert.equal(calls, 1);
@@ -242,6 +244,7 @@ test("OAuth rejections, malformed success and unavailable resources have distinc
   const result = await run()("secret-resource", live(base), {
     ...settings,
     resourcePath: "/resource",
+    successField: "message",
   });
   assert.equal(result.status, "INCONCLUSIVE");
   assert.equal(result.evidence.length, 1);
@@ -375,6 +378,7 @@ test("API separates catalogs, rejects mode confusion and never persists credenti
       clientId: "demo-client",
       clientSecret: DEMO_SECRET,
       resourcePath: "/resource",
+      successField: "message",
     },
   });
   assert.equal(httpResult.status, 200);

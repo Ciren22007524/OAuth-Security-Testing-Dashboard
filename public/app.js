@@ -86,7 +86,12 @@ async function selectEnvironment(id) {
     $("filter").firstElementChild.value = "all";
     $("environment-select").value = currentEnvironment.id;
     $("environment-mode").textContent =
-      currentEnvironment.type === "http" ? "HTTP 服務" : "隔離模擬";
+      currentEnvironment.type === "http"
+        ? {
+            "auth-service-oidc": "auth-service OIDC",
+            "array-session": "Array session",
+          }[currentEnvironment.protocol] || "舊版 JSON／ES256"
+        : "隔離模擬";
     $("environment-mode").dataset.mode = environmentMode();
     $("environment-mode").classList.toggle(
       "http",
@@ -130,6 +135,8 @@ function profileFields() {
   const http = $("profile-type").value === "http";
   $("http-profile-fields").hidden = !http;
   $("profile-url").required = http;
+  $("defense-profile-fields").hidden =
+    testingMode === "attack" || $("profile-protocol").value !== "legacy";
   for (const input of $("http-profile-fields").querySelectorAll("input"))
     input.disabled = !http;
 }
@@ -141,6 +148,9 @@ function openEnvironment(profile) {
   $("profile-name").value = profile?.name || "";
   $("profile-type").value = profile?.type || "http";
   $("profile-url").value = profile?.baseUrl || "";
+  $("profile-protocol").value = profile
+    ? profile.protocol || "legacy"
+    : "auth-service-oidc";
   $("profile-client").value = profile?.clientId || "";
   $("profile-origin").value = profile?.origin || "";
   $("profile-redirect").value = profile?.redirectUri || "";
@@ -165,6 +175,7 @@ async function saveEnvironment(remove = false) {
           ...($("profile-type").value === "http"
             ? {
                 baseUrl: $("profile-url").value,
+                protocol: $("profile-protocol").value,
                 clientId: $("profile-client").value,
                 origin: $("profile-origin").value,
                 redirectUri: $("profile-redirect").value,
@@ -674,6 +685,7 @@ $("environment-new").onclick = () => openEnvironment();
 $("environment-edit").onclick = () => openEnvironment(currentEnvironment);
 $("environment-close").onclick = () => $("environment-dialog").close();
 $("profile-type").onchange = profileFields;
+$("profile-protocol").onchange = profileFields;
 $("environment-form").onsubmit = (event) => {
   event.preventDefault();
   saveEnvironment();

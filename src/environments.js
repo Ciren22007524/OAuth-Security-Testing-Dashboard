@@ -15,7 +15,15 @@ export const LOCAL_ENVIRONMENT = Object.freeze({
   revision: 1,
   builtin: true,
 });
-const fields = ["name", "type", "baseUrl", "clientId", "origin", "redirectUri"];
+const fields = [
+  "name",
+  "type",
+  "baseUrl",
+  "clientId",
+  "origin",
+  "redirectUri",
+  "protocol",
+];
 function text(value, max) {
   if (
     typeof value !== "string" ||
@@ -64,6 +72,13 @@ export function validateEnvironment(input) {
     throw new EnvironmentError("invalid_environment");
   if (input.type === "simulation") return { name, type: "simulation" };
   const result = { name, type: "http", baseUrl: address(input.baseUrl, true) };
+  if (input.protocol !== undefined) {
+    if (
+      !["legacy", "auth-service-oidc", "array-session"].includes(input.protocol)
+    )
+      throw new EnvironmentError("invalid_environment");
+    result.protocol = input.protocol;
+  }
   if (input.clientId) result.clientId = text(input.clientId, 200);
   if (input.origin) result.origin = address(input.origin, true);
   if (input.redirectUri) result.redirectUri = address(input.redirectUri);

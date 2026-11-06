@@ -1,11 +1,16 @@
+import { arrayAttackHandlers } from "./array-session-scenarios.js";
 import { createAttackFixture } from "./attack-fixture.js";
 import {
-  attackCatalog,
+  getAttackCatalog,
   validateAttackInput,
   demoSettings,
 } from "./attack-catalog.js";
 import { attackHandlers } from "./attack-scenarios.js";
-export { attackCatalog, validateAttackInput } from "./attack-catalog.js";
+export {
+  attackCatalog,
+  getAttackCatalog,
+  validateAttackInput,
+} from "./attack-catalog.js";
 
 export function createAttackRunner({ minimumInterval = 500 } = {}) {
   const lastRequests = new Map();
@@ -16,7 +21,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
     input,
     { signal, fixtureOptions } = {},
   ) {
-    const scenario = attackCatalog.find((s) => s.id === id);
+    const scenario = getAttackCatalog(environment).find((s) => s.id === id);
     if (!scenario) throw new Error("Unknown attack scenario");
     const settings = validateAttackInput(input, id);
     const result = {
@@ -32,6 +37,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
         name: environment.name,
         type: environment.type,
         revision: environment.revision,
+        protocol: environment.protocol || "legacy",
         ...(environment.baseUrl ? { baseUrl: environment.baseUrl } : {}),
       },
       target: environment.baseUrl || "isolated-attack-fixture",
@@ -59,6 +65,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
       const base = fixture?.url || environment.baseUrl;
       const secrets = [
         settings.clientSecret,
+        settings.sessionCookie,
         settings.accessToken,
         settings.refreshToken,
         settings.code,
@@ -123,10 +130,13 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
           chunks.push(chunk);
         }
         let body = {};
+        let jsonObject = false;
         try {
           const parsed = JSON.parse(Buffer.concat(chunks).toString());
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
             body = parsed;
+            jsonObject = true;
+          }
         } catch {}
         if (typeof body.access_token === "string")
           secrets.push(body.access_token);
@@ -157,6 +167,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
               ...(options.headers?.Authorization
                 ? { Authorization: "[REDACTED]" }
                 : {}),
+              ...(options.headers?.Cookie ? { Cookie: "[REDACTED]" } : {}),
             },
             body: form
               ? {
@@ -169,6 +180,9 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
                       .filter((key) => form.has(key))
                       .map((key) => [key, "[REDACTED]"]),
                   ),
+                  ...(form.has("resource")
+                    ? { resource: safe(form.get("resource")) }
+                    : {}),
                   ...(form.has("redirect_uri")
                     ? { redirect_uri: safe(form.get("redirect_uri")) }
                     : {}),
@@ -185,6 +199,8 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
               accessTokenPresent:
                 typeof body.access_token === "string" &&
                 Boolean(body.access_token),
+              jsonObject,
+              arrayUserPresent: typeof body.user?.sub === "string",
               subjectPresent: typeof body.sub === "string" && Boolean(body.sub),
               idTokenPresent:
                 typeof body.id_token === "string" && Boolean(body.id_token),
@@ -210,7 +226,12 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
           );
           throw new Error("Rate limited");
         }
-        return { status: response.status, body };
+        return {
+          status: response.status,
+          body,
+          jsonObject,
+          contentType: response.headers.get("content-type") || "",
+        };
       }
       let metadata;
       async function discovery() {
@@ -250,7 +271,11 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
           const methods = document?.token_endpoint_auth_methods_supported || [
             "client_secret_basic",
           ];
-          auth = ["client_secret_basic", "client_secret_post"].find(
+          auth = (
+            settings.clientSecret
+              ? ["client_secret_basic", "client_secret_post"]
+              : ["none"]
+          ).find(
             (method) => Array.isArray(methods) && methods.includes(method),
           );
           if (!auth) {
@@ -283,7 +308,7 @@ export function createAttackRunner({ minimumInterval = 500 } = {}) {
           body: body.toString(),
         });
       }
-      await attackHandlers[id]({
+      await { ...attackHandlers, ...arrayAttackHandlers }[id]({
         exchange,
         endpoint,
         request,

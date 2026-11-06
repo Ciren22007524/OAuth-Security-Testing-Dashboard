@@ -42,16 +42,27 @@ const codeGrant = (settings) => ({
   grant_type: "authorization_code",
   code: settings.code,
   redirect_uri: settings.redirectUri,
+  ...(settings.resource ? { resource: settings.resource } : {}),
   ...(settings.codeVerifier ? { code_verifier: settings.codeVerifier } : {}),
 });
 const refreshGrant = (settings) => ({
   grant_type: "refresh_token",
   refresh_token: settings.refreshToken,
+  ...(settings.resource ? { resource: settings.resource } : {}),
   ...(settings.scope ? { scope: settings.scope } : {}),
 });
 async function baseline(context, endpoint) {
   const response = await context.request(endpoint);
-  if (![401, 403].includes(response.status)) {
+  if (
+    !response.jsonObject ||
+    !/^application\/(?:[\w.+-]+\+)?json(?:;|$)/i.test(
+      response.contentType || "",
+    ) ||
+    ![401, 403].includes(response.status) ||
+    !["invalid_token", "insufficient_scope", "login_required"].includes(
+      response.body.error,
+    )
+  ) {
     context.result.status = "INCONCLUSIVE";
     context.result.observations.push(
       succeeded(response)
@@ -66,12 +77,33 @@ async function read(context, endpoint, token, userinfo = false) {
   const response = await context.request(endpoint, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  let data = response.body;
+  if (!userinfo)
+    for (const key of context.settings.successField.split(".")) {
+      data =
+        data && typeof data === "object" && Object.hasOwn(data, key)
+          ? data[key]
+          : undefined;
+    }
+  const validJson =
+    response.jsonObject &&
+    /^application\/(?:[\w.+-]+\+)?json(?:;|$)/i.test(
+      response.contentType || "",
+    );
+  const evidence =
+    validJson &&
+    !response.body.error &&
+    (userinfo
+      ? typeof response.body.sub === "string" && response.body.sub.length > 0
+      : data !== undefined && data !== null && data !== "");
   context.result.status =
-    succeeded(response) &&
-    (!userinfo ||
-      (typeof response.body.sub === "string" && response.body.sub.length > 0))
+    succeeded(response) && evidence
       ? "SUCCEEDED"
-      : [401, 403].includes(response.status)
+      : validJson &&
+          [401, 403].includes(response.status) &&
+          ["invalid_token", "insufficient_scope", "login_required"].includes(
+            response.body.error,
+          )
         ? "BLOCKED"
         : "INCONCLUSIVE";
   context.result.observations.push(

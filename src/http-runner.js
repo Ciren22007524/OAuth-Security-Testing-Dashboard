@@ -1,3 +1,8 @@
+import {
+  oidcCatalog,
+  arrayCatalog,
+  serviceHandlers,
+} from "./service-profiles.js";
 import { httpHandlers } from "./http-scenarios.js";
 import { randomUUID } from "node:crypto";
 import { catalog, redact } from "./runner.js";
@@ -48,11 +53,18 @@ export const httpCatalog = [
     })),
 ];
 
+export function getHttpCatalog(environment) {
+  return (
+    { "auth-service-oidc": oidcCatalog, "array-session": arrayCatalog }[
+      environment.protocol
+    ] || httpCatalog
+  );
+}
 export function createHttpRunner({ minimumInterval = 500 } = {}) {
   const lastRequests = new Map();
   const cooldowns = new Map();
   return async function runHttpScenario(id, environment, { signal } = {}) {
-    const scenario = httpCatalog.find((s) => s.id === id);
+    const scenario = getHttpCatalog(environment).find((s) => s.id === id);
     if (!scenario) throw new Error("Unknown HTTP scenario");
     const result = {
       ...scenario,
@@ -174,7 +186,27 @@ export function createHttpRunner({ minimumInterval = 500 } = {}) {
               headers: options.headers || {},
               body: options.body ? JSON.parse(options.body) : undefined,
             },
-            response: { status: response.status, headers, body },
+            response: {
+              status: response.status,
+              headers,
+              body:
+                environment.protocol === "array-session"
+                  ? {
+                      service:
+                        body.service === "array-sso-test"
+                          ? body.service
+                          : undefined,
+                      status: body.status === "up" ? body.status : undefined,
+                      error:
+                        body.error === "login_required"
+                          ? body.error
+                          : undefined,
+                      userPresent: typeof body.user?.sub === "string",
+                      expiryPresent: Number.isFinite(body.expiresAt),
+                      nonJson: body.nonJson,
+                    }
+                  : body,
+            },
           }),
         );
         if (response.status === 429) {
@@ -195,6 +227,15 @@ export function createHttpRunner({ minimumInterval = 500 } = {}) {
           throw error;
         }
         return { status: response.status, headers, body };
+      }
+      if (Object.hasOwn(serviceHandlers, id)) {
+        await serviceHandlers[id]({ request, check, result, environment });
+        if (result.status !== "INCONCLUSIVE")
+          result.status =
+            result.assertions.length && result.assertions.every((a) => a.passed)
+              ? "PASS"
+              : "FAIL";
+        return result;
       }
       const unknown = `dashboard-unregistered-${randomUUID()}`;
       const authorize = (overrides = {}) =>

@@ -180,7 +180,7 @@ export const catalog = [
 
 export function redact(value, key = "") {
   if (
-    /cookie|^authorization$|secret|password|email|^sub$|^(?:(?:access|refresh|id)[_-]?)?token$|^jwt$|^(?:d|p|q|dp|dq|qi|k)$/i.test(
+    /cookie|^authorization$|secret|password|email|^sub$|^(?:(?:access|refresh|id)[_-]?)?token$|^jwt$|^(?:d|p|q|dp|dq|qi|oth|k)$/i.test(
       key,
     )
   )

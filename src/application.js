@@ -1,12 +1,12 @@
 import {
   createAttackRunner,
-  attackCatalog,
+  getAttackCatalog,
   validateAttackInput,
 } from "./attack-runner.js";
 import { createServer } from "node:http";
 import { catalog, runScenario } from "./runner.js";
 import { createEnvironmentStore, EnvironmentError } from "./environments.js";
-import { createHttpRunner, httpCatalog } from "./http-runner.js";
+import { createHttpRunner, getHttpCatalog } from "./http-runner.js";
 
 export function createDashboardServer({
   environmentsFile,
@@ -31,12 +31,13 @@ export function createDashboardServer({
   };
   const modes = Object.freeze({
     defense: {
-      catalogs: { simulation: catalog, http: httpCatalog },
+      catalogFor: (profile) =>
+        profile.type === "simulation" ? catalog : getHttpCatalog(profile),
       run: (input, profile, options) =>
         defenseRunners[profile.type](input.id, profile, options),
     },
     attack: {
-      catalogs: { simulation: attackCatalog, http: attackCatalog },
+      catalogFor: getAttackCatalog,
       run: (input, profile, options) =>
         runAttack(input.id, profile, input.attack, options),
     },
@@ -78,7 +79,7 @@ export function createDashboardServer({
             profile.type === "simulation" ? "SIMULATION" : "CUSTOM_HTTP",
           profile,
           testingMode: mode,
-          catalog: modes[mode].catalogs[profile.type],
+          catalog: modes[mode].catalogFor(profile),
         });
       }
       if (req.method === "GET" && path === "/api/health")
@@ -139,7 +140,7 @@ export function createDashboardServer({
             input.environmentId || "local",
           );
           const mode = testingMode(input.testingMode);
-          const selectedCatalog = modes[mode].catalogs[profile.type];
+          const selectedCatalog = modes[mode].catalogFor(profile);
           const allowedFields = [
             "id",
             "environmentId",
