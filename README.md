@@ -35,6 +35,14 @@ npm run test:browser
 
 ![本機 Web 介面](docs/screenshots/web-ui.png)
 
+## 建議操作方向
+
+日常驗測改以「獨立整合工作台」為目標：直接串接隔離的 auth-service 與 Array，自動準備測試 A／B、登入交易及憑證，手填參數保留為進階功能；不把任意身分切換加入正式 auth-service。分工與交付切片見 [操作設計](docs/TESTING_ARCHITECTURE.md)。一鍵整合流程尚未完成。
+
+## 最新服務相容性
+
+HTTP 環境可選 `auth-service（標準 OIDC／RS256）`、`Array SSO Worker（本站 session）` 或舊版相容協定。工具依服務篩選情境；泛用資源成功需符合 JSON 與指定資料欄位，不以 200 當成功。最新契約差異、來源回歸指令及未完成項目見 [auth-service review](docs/AUTH_SERVICE_REVIEW.md)。
+
 ## array-test 整合驗收
 
 已找到 [array-line-demo](https://github.com/Ciren22007524/array-line-demo)，核對其 Cloudflare SSO Worker 使用 public client＋PKCE，瀏覽器以本站 HttpOnly session 存取 `/api/me`。可用 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source` 重跑已通過的 9 組來源測試；實際契約與驗收順序見 [Array 串接盤點](docs/ARRAY_LINE_DEMO.md)。

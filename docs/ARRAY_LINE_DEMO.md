@@ -1,5 +1,7 @@
 # array-line-demo 實際串接盤點
 
+後續更新（2026-11-06）：最新查核 Array `fc79f38`／auth-service `337b1ce`；Array 新增後端 UserInfo 與 sub 比對，部署用 SSO_CLIENT_ID 不再固定在 vars，來源測試已為 14 組。以下 `7264cca`／9 組為前次紀錄；目前以 [新版 review](AUTH_SERVICE_REVIEW.md) 為準。
+
 查核日期：2026-11-04。這份文件依最新取得的原始碼，不再沿用舊版 auth-service 的 JSON＋refresh cookie 假設。
 
 | 專案 | 查核版本 | 入口 |

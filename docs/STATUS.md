@@ -2,6 +2,15 @@
 
 更新：2026-11-04
 
+## 最新 review 與相容性修正（2026-11-06）
+
+- 已更新查核 auth-service `337b1ce`、Array `fc79f38`，來源測試分別為 170 項／14 組通過；不是正式部署驗收。
+- HTTP 環境新增標準 OIDC／Array session／舊版分流；discovery 動態端點與 RSA RS256，Array /api/me schema、cookie 遮罩與對應情境已接入。舊來源指令拒絕標準 OIDC checkout，新增 `test:auth-oidc-source`。
+- 泛用資源需要成功識別欄位與 JSON 證據，避免 HTML／錯誤頁／WAF 假成功；支援 OIDC resource 參數與 public client none 認證。
+- 工具 36 模組語法檢查、85 項 Node、完整 Chromium 流程與資源 6 項通過；file: 因政策跳過 1 項。
+- 使用者指出手填參數操作繁瑣；建議保留獨立工作台，直接串接隔離的真實服務並自動準備 A／B 與交易，不把任意身分／攻擊控制放進正式 auth-service。
+- 詳細差異見 `AUTH_SERVICE_REVIEW.md`，後續一鍵整合方向見 `TESTING_ARCHITECTURE.md`。一鍵服務啟動與多使用者瀏覽器流程尚未實作。
+
 ## 已找到並查核 Array 實際專案（2026-11-04）
 
 - `Ciren22007524/array-line-demo` @ `7264cca`；目前預設為 `cloudflare/sso-test` Worker。`auth-service` 最新查核為 `4b5473b`，已是標準 OIDC，舊 JSON＋refresh cookie checkout 不再代表現況。

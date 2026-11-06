@@ -628,7 +628,7 @@ try {
     "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
   );
   await evaluate(
-    `document.getElementById('profile-name').value='Case isolation target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-client').value='environment-client-only';document.getElementById('environment-form').requestSubmit()`,
+    `document.getElementById('profile-name').value='Case isolation target';document.getElementById('profile-protocol').value='legacy';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-client').value='environment-client-only';document.getElementById('environment-form').requestSubmit()`,
   );
   await wait(
     "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
@@ -678,6 +678,43 @@ try {
     ))
   )
     throw Error("Mode change retained scenario secrets");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
+  await evaluate(
+    `document.getElementById('profile-name').value='Modern OIDC';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-protocol').value='auth-service-oidc';document.getElementById('environment-form').requestSubmit()`,
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.querySelectorAll('.scenario').length===7",
+  );
+  if (
+    await evaluate(
+      "document.getElementById('catalog').textContent.includes('持有 client secret')",
+    )
+  )
+    throw Error("OIDC profile exposes unsupported client_credentials");
+  await evaluate(
+    "document.getElementById('environment-edit').click();document.getElementById('profile-protocol').value='array-session';document.getElementById('environment-form').requestSubmit()",
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.querySelectorAll('.scenario').length===3",
+  );
+  await evaluate(
+    "document.getElementById('environment-panel-done').click();document.querySelectorAll('.scenario')[2].click()",
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-sessionCookie') && !document.getElementById('attack-accessToken') && !document.getElementById('attack-clientSecret')",
+    ))
+  )
+    throw Error("Array profile did not show session-only inputs");
+  await writeFile(
+    join(work, "array-session-profile.png"),
+    Buffer.from(
+      (await call("Page.captureScreenshot", { format: "png" })).data,
+      "base64",
+    ),
+  );
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({

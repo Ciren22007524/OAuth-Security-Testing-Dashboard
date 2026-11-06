@@ -61,3 +61,9 @@ redirect／state 檢查先用已登記的合法設定建立短期 OAuth 交易�
 ## 測試模式
 
 環境類型（模擬／HTTP）與測試模式（防禦／攻擊）分開選擇。攻擊模式的參數在各情境右側表單獨立填寫，環境只選目標，不沿用環境的防禦用 client ID／Origin／redirect URI；環境設定本身仍不接受 secret。OIDC discovery、標準 token 認證與資源對照請求的支援範圍見 [攻擊模式](ATTACK_MODE.md)。
+
+## HTTP 服務協定（2026-11-06）
+
+新建環境選擇 auth-service OIDC／Array session／舊版相容；已保存而未指定 protocol 的環境保留舊版，測新版時需明確編輯選擇。修改會更新 revision 並隔離舊結果。協定只決定 adapter 與情境，不保存憑證。
+
+auth-service 使用 discovery、RSA RS256 與 S256；Array 使用本站 cookie 和 /api/me，不將 issuer 的 access token 當作 Array 登入 session。新協定的 client ID／code／token 仍在情境內填寫，日後由整合 runner 自動準備；目前的一鍵整合尚未交付。

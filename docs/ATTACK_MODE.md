@@ -1,6 +1,6 @@
 # 攻擊情境與各自的參數
 
-模式分為防禦驗證與攻擊模擬。防禦模式保留既有 23 個模擬／10 個 HTTP 情境；攻擊模式提供下面 10 個可執行 use case。
+模式分為防禦驗證與攻擊模擬。防禦模式保留既有 23 個模擬／10 個 HTTP 情境；模擬／舊版攻擊模式提供下面 10 個 use case；新版 auth-service 顯示 7 項適用情境，Array session 顯示 3 項本站 cookie／未登入情境。
 
 **環境只選目標；攻擊參數填在右側的個別情境表單。** 不再使用共用憑證面板，也不沿用環境中防禦驗證用的 client ID、Origin 或 redirect URI。
 
@@ -57,3 +57,9 @@ HTTP 模式中 `*` 是該情境的必填欄位。公開 client 的授權碼／re
 所有端點限於所選目標同 origin。多租戶 provider 可在個別情境直接指定 token 路徑，例如 `/realms/example/protocol/openid-connect/token`，並指定認證方式。不同 origin 的 resource server、mTLS、private_key_jwt、session cookie、真正瀏覽器 CSRF／CORS、nonce 與完整 OIDC conformance 尚未加入；沒有對正式 Google 或其他 provider 執行驗收。
 
 欄位與必填條件在 `src/attack-catalog.js`；個別操作在 `src/attack-scenarios.js` 的 handler 註冊表；傳輸、節流、取消與遮罩在 `src/attack-runner.js`；fixture 在 `src/attack-fixture.js`。前端根據 catalog schema 生成每個情境的表單，後端也依同一 schema 拒絕不屬於該情境的欄位。
+
+## 新版服務適配（2026-11-06）
+
+環境的服務協定會篩選情境，避免對 Array 發送 client_credentials 或以舊版 ES256 誤判 RS256。Array 提供未登入、隨機偽造 session、持有本站 session 讀取 /api/me；session 欄位只填 cookie 的值，不能貼 Cookie header 或送往 issuer。
+
+泛用資源讀取另需 successField，例如 data.id；JSON 格式與該欄位同時符合才算成功。授權碼／refresh 可選填登記過的 API resource origin。完整差異與操作架構見 [服務 review](AUTH_SERVICE_REVIEW.md) 與 [整合工作台方向](TESTING_ARCHITECTURE.md)。

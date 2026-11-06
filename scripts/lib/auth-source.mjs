@@ -11,6 +11,15 @@ export async function loadAuthSource() {
     );
   const root = await realpath(process.env.AUTH_SERVICE_PATH);
   await access(join(root, "src/test-helpers.ts"));
+  let standardOidc = false;
+  try {
+    await access(join(root, "src/oidc/test-oidc.ts"));
+    standardOidc = true;
+  } catch {}
+  if (standardOidc)
+    throw new Error(
+      "此 checkout 已是標準 OIDC，舊 JSON／ES256 整合指令不適用。請改用 npm run test:auth-oidc-source；不要把舊路由失敗當成新版服務漏洞。",
+    );
   const prefix = pathToFileURL(root + "/").href;
   registerHooks({
     resolve(specifier, context, next) {

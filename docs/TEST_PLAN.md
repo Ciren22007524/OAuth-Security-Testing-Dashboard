@@ -10,7 +10,7 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 ## Array 真實來源驗證
 
-執行 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source`。目前查核 Array `7264cca`，9 組既有來源測試通過，涵蓋真實 Worker 的登入、session、callback、claims、簽章、CSRF、登出及入口限流。OIDC fetch／store／limiter 為隔離替身，不代表正式 Google、瀏覽器 cookie 或 Cloudflare runtime 已驗收。契約與完整流程見 [Array 串接盤點](ARRAY_LINE_DEMO.md)。
+執行 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source`。最新查核 Array `fc79f38`，14 組既有來源測試通過，涵蓋真實 Worker 的登入、session、callback、claims、簽章、CSRF、登出及入口限流。OIDC fetch／store／limiter 為隔離替身，不代表正式 Google、瀏覽器 cookie 或 Cloudflare runtime 已驗收。契約與完整流程見 [Array 串接盤點](ARRAY_LINE_DEMO.md)。
 
 ## 攻擊模式驗證
 
@@ -64,3 +64,9 @@ Node 測試也逐項對獨立 HTTP provider 執行所有情境，並以可重播
 - 已將 main PR #1 的 Node 24 JWKS 修正納入並重新跑 61 個測試／重建；沒有覆蓋他人的修改。
 - Windows x64 成品已交叉產生、核對 PE／SEA 與官方 Node checksum；未在本機執行 Windows EXE。Windows 工作流程通過才會發布 preview Release，狀態需查 GitHub，不能將本機 build 當作 Windows CI 通過。
 - 原有根／子路徑與完整瀏覽器流程在共用服務拆分後已通過；新增 Node 24 相容性修正後再通過 portable smoke／browser，未改動前端外觀。
+
+## 新版 auth-service 與協定分流
+
+`AUTH_SERVICE_PATH=/path/to/auth-service npm run test:auth-oidc-source` 執行最新標準 OIDC 全套來源回歸；本輪 `337b1ce` 170 項通過。舊 JSON／ES256 三項來源指令遇到新版會停止並提供新指令。
+
+`service-profiles.test.js` 檢查動態 RS256 JWKS、私鑰遮罩、跨 origin 拒絕、Array session cookie 與資料最小化，以及 HTML／錯誤 JSON／欄位不符不算 2xx 成功。瀏覽器測試包含協定保存、OIDC 排除 client_credentials、Array 切換為 session 專屬表單。
