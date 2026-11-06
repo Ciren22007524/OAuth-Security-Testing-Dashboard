@@ -7,13 +7,15 @@ let currentEnvironment;
 let testingMode = "defense";
 const scenarioInputs = new Map();
 let loadingEnvironment = false;
+let integrationAvailable = false;
 let editingEnvironment;
 const environmentMode = () =>
   currentEnvironment?.type === "http" ? "CUSTOM_HTTP" : "SIMULATION";
 function environmentControls() {
   $("testing-mode").disabled = running || loadingEnvironment;
   $("run").hidden = testingMode === "attack";
-  $("environment-open").disabled = !currentEnvironment || loadingEnvironment;
+  $("environment-open").disabled =
+    !currentEnvironment || loadingEnvironment || testingMode === "integration";
   $("environment-edit").hidden =
     !currentEnvironment || currentEnvironment.builtin;
   $("environment-select").disabled = running || loadingEnvironment;
@@ -30,7 +32,7 @@ async function refreshEnvironments() {
   environments = (await response.json()).environments;
   const validGroups = new Set(
     environments.flatMap((profile) =>
-      ["defense", "attack"].map(
+      ["defense", "attack", "integration"].map(
         (mode) => `${profile.id}:${profile.revision}:${mode}`,
       ),
     ),
@@ -70,6 +72,9 @@ async function selectEnvironment(id) {
     }
     currentEnvironment = data.profile;
     $("startup-help").hidden = true;
+    integrationAvailable = data.integration?.ready === true;
+    $("integration-help").hidden = testingMode !== "integration";
+    $("integration-help").textContent = data.integration?.message || "";
     catalog = data.catalog;
     const key = `${currentEnvironment.id}:${currentEnvironment.revision}:${testingMode}`;
     if (!resultGroups.has(key)) resultGroups.set(key, new Map());
@@ -114,7 +119,17 @@ async function selectEnvironment(id) {
           : "執行內建隔離模擬，不會連線到你的服務。通過不代表正式服務安全。";
     $("console").textContent =
       `[ready] ${currentEnvironment.name} · ${environmentMode()}。結果依環境及設定版本分開保留。`;
-    $("status").textContent = `就緒 · ${currentEnvironment.name}`;
+    if (testingMode === "integration") {
+      $("environment-name").textContent = "隔離來源整合";
+      $("environment-summary").textContent =
+        "真實 auth-service＋Array，假 Google／獨立資料";
+    }
+    $("status").textContent =
+      testingMode === "integration"
+        ? "選使用者 A／B，參數會自動準備"
+        : `就緒 · ${currentEnvironment.name}`;
+    $("run").textContent =
+      testingMode === "integration" ? "執行 A／B 完整流程" : "執行全部情境";
     try {
       sessionStorage.setItem("oauth-environment-id", currentEnvironment.id);
     } catch {}
@@ -127,7 +142,9 @@ async function selectEnvironment(id) {
     throw error;
   } finally {
     loadingEnvironment = false;
-    $("run").disabled = !currentEnvironment;
+    $("run").disabled =
+      !currentEnvironment ||
+      (testingMode === "integration" && !integrationAvailable);
     environmentControls();
   }
 }
@@ -314,7 +331,8 @@ function detail() {
   );
   const run = element("button", "執行此情境", "primary");
   run.id = "scenario-run";
-  run.disabled = running;
+  run.disabled =
+    running || (testingMode === "integration" && !integrationAvailable);
   run.onclick = () => {
     const form = $("scenario-form");
     if (!form || form.reportValidity()) execute([scenario]);
@@ -467,7 +485,7 @@ async function execute(scenarios) {
       const result = await response.json();
       results.set(scenario.id, result);
       log(
-        `[${currentEnvironment.name}] ${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
+        `[${testingMode === "integration" ? "來源整合" : currentEnvironment.name}] ${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
       );
       render();
       detail();
@@ -480,8 +498,21 @@ async function execute(scenarios) {
     }
     $("status").textContent = rateLimited
       ? "目標回報限流，已停止剩餘情境；請等待 Retry-After 再執行。"
-      : `執行完成 · ${currentEnvironment.name}`;
+      : testingMode === "integration"
+        ? "來源整合完成 · 隔離 auth-service＋Array"
+        : `執行完成 · ${currentEnvironment.name}`;
   } catch (error) {
+    if (controller.signal.aborted && testingMode === "integration") {
+      $("status").textContent = "正在停止並清理隔離瀏覽器與服務…";
+      $("cancel").disabled = true;
+      for (let attempt = 0; attempt < 160; attempt++) {
+        try {
+          const health = await (await fetch("./api/health")).json();
+          if (!health.busy) break;
+        } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
     const message = controller.signal.aborted
       ? "已停止；已完成的結果保留，未執行項目不計入。"
       : error.message;
@@ -500,22 +531,26 @@ function exportReport(format) {
   const report = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    environment: environmentMode(),
+    environment:
+      testingMode === "integration" ? "SOURCE_INTEGRATION" : environmentMode(),
     testingMode,
     environmentId: currentEnvironment.id,
-    environmentName: currentEnvironment.name,
+    environmentName:
+      testingMode === "integration" ? "隔離來源整合" : currentEnvironment.name,
     configuration:
-      testingMode === "attack"
-        ? {
-            id: currentEnvironment.id,
-            name: currentEnvironment.name,
-            type: currentEnvironment.type,
-            revision: currentEnvironment.revision,
-            ...(currentEnvironment.baseUrl
-              ? { baseUrl: currentEnvironment.baseUrl }
-              : {}),
-          }
-        : currentEnvironment,
+      testingMode === "integration"
+        ? { type: "source-integration" }
+        : testingMode === "attack"
+          ? {
+              id: currentEnvironment.id,
+              name: currentEnvironment.name,
+              type: currentEnvironment.type,
+              revision: currentEnvironment.revision,
+              ...(currentEnvironment.baseUrl
+                ? { baseUrl: currentEnvironment.baseUrl }
+                : {}),
+            }
+          : currentEnvironment,
     limitations: [
       ...(testingMode === "attack"
         ? [
@@ -524,9 +559,11 @@ function exportReport(format) {
         : []),
       testingMode === "attack"
         ? "憑證與取得的 token 不保存、不匯出；已簽發的 token 未自動撤銷，效期由目標管理。"
-        : currentEnvironment.type === "http"
-          ? "僅測試所選 HTTP 目標的公開及無 session 端點；未驗證真實登入、輪替、撤銷或瀏覽器 CORS。"
-          : "僅驗證隔離模擬器；不代表 HTTP 目標、Google 登入、D1 或瀏覽器 CORS 通過。",
+        : testingMode === "integration"
+          ? "此模式未使用選定 HTTP 目標；來源版本與逐步驗證請見各情境結果。"
+          : currentEnvironment.type === "http"
+            ? "僅測試所選 HTTP 目標的公開及無 session 端點；未驗證真實登入、輪替、撤銷或瀏覽器 CORS。"
+            : "僅驗證隔離模擬器；不代表 HTTP 目標、Google 登入、D1 或瀏覽器 CORS 通過。",
     ],
     results: [...results.values()],
   };
@@ -537,7 +574,7 @@ function exportReport(format) {
         report.results
           .map(
             (r) =>
-              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${(r.observations || []).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
+              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.sourceRevisions ? `來源版本：auth-service ${r.sourceRevisions.auth} / Array ${r.sourceRevisions.array}\n\n` : ""}${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${(r.observations || []).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
           )
           .join("\n");
   const url = URL.createObjectURL(
@@ -547,7 +584,10 @@ function exportReport(format) {
   );
   const link = element("a");
   link.href = url;
-  link.download = `oauth-${currentEnvironment.type === "simulation" ? "simulation" : currentEnvironment.id}${testingMode === "attack" ? "-attack" : ""}-report.${format === "json" ? "json" : "md"}`;
+  link.download =
+    testingMode === "integration"
+      ? `oauth-integration-report.${format === "json" ? "json" : "md"}`
+      : `oauth-${currentEnvironment.type === "simulation" ? "simulation" : currentEnvironment.id}${testingMode === "attack" ? "-attack" : ""}-report.${format === "json" ? "json" : "md"}`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -640,7 +680,9 @@ $("testing-mode").onchange = async () => {
   testingMode = $("testing-mode").value;
   if (testingMode !== "attack") clearAttackCredentials();
   try {
-    await selectEnvironment(currentEnvironment.id);
+    await selectEnvironment(
+      testingMode === "integration" ? "local" : currentEnvironment.id,
+    );
   } catch {
     testingMode = previous;
     $("testing-mode").value = previous;

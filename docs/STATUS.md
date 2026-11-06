@@ -2,6 +2,15 @@
 
 更新：2026-11-04
 
+## 已交付免填參數的第一條整合流程（2026-11-06）
+
+- 新增整合驗測模式，使用 A／B 各自的真實 auth-service／Array source 與 Chromium，自動註冊 confidential client、注入當次 secret、準備完整登入交易與 cookie；不用手填參數。
+- 正常登入、後端 UserInfo、/api/me、cookie 屬性、本站登出及舊 session 401 已跑通；故意不撤銷 session 的負向控制可被抓出。UI 單項／批次與來源版號報告驗證通過。
+- `npm run setup:integration` 取得固定來源與依賴；`npm run test:integration` 重跑正反向控制。來源由工具自己的 ignored 快取或一次指定的 checkout 提供，不修改上游。
+- 更正前次 public client 假設：目前實際 source 要求 Array 後端 `SSO_CLIENT_SECRET`／Basic，runner 以隔離 DCR 自動處理，不把 secret 交給使用者搬動。
+- 驗證：43 個 JS 模組語法檢查、86 個 Node 測試通過；A／B 各 10 個整合斷言、負向撤銷控制與取消清理通過，完整 Chromium UI／報告及 6 項資源檢查通過（file: 1 項受政策跳過）。
+- 實際 Google／Cloudflare／網路 TLS 未驗收；跨 client、外洩能力、真正 RCE 隔離仍待做。說明見 `INTEGRATION_RUNNER.md` 與 `COMPROMISED_CLIENT.md`。
+
 ## 最新 review 與相容性修正（2026-11-06）
 
 - 已更新查核 auth-service `337b1ce`、Array `fc79f38`，來源測試分別為 170 項／14 組通過；不是正式部署驗收。

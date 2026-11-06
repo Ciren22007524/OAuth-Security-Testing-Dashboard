@@ -1,6 +1,6 @@
 # 操作方向：獨立的整合驗測工作台
 
-日期：2026-11-06。這份文件區分建議方向與已交付功能；一鍵多使用者整合流程尚未完成。
+日期：2026-11-06。這份文件區分建議方向與已交付功能；第一條 A／B 自動登入至登出流程已實作，操作見 [整合 runner](INTEGRATION_RUNNER.md)；後續外洩／跨 client 情境未完成。
 
 ## 建議與分工
 
@@ -44,4 +44,4 @@ owner／scope／secret 變更情境需可拋棄 client 與獨立擁有者 A／B�
 
 已完成：舊／新協定分流、OIDC RSA discovery 檢查、Array 基本 session HTTP 情境、2xx 假成功防護、每情境隔離的進階欄位，以及可重跑的 auth-service／Array 最新來源測試。
 
-未完成：從 Dashboard 一鍵啟動兩服務、A／B 身分與交易自動準備、完整隔離瀏覽器登入、owner／scope／secret 管理的跨服務情境。CLI 來源測試與手動 HTTP 情境不冒充這些尚未交付的整合功能。
+已另完成：Dashboard 來源整合模式，自動準備 A／B、註冊 client 與 secret，使用 Chromium 跑登入至撤銷對照。未完成：owner／scope／secret 管理的跨服務情境與正式環境瀏覽器驗收。CLI 來源測試與手動 HTTP 情境不冒充這些尚未交付的整合功能。

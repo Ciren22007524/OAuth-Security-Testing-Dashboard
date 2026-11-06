@@ -715,6 +715,68 @@ try {
       "base64",
     ),
   );
+  await evaluate(
+    "document.getElementById('testing-mode').value='integration';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    "document.querySelectorAll('.scenario').length===2 && !document.getElementById('testing-mode').disabled",
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('environment-select').value==='local' && document.getElementById('environment-open').disabled && !document.getElementById('scenario-form') && !document.getElementById('integration-help').hidden",
+    ))
+  )
+    throw Error(
+      "Integration mode still requests attack credentials or uses HTTP target",
+    );
+  if (!(await evaluate("document.getElementById('run').disabled"))) {
+    await evaluate("document.getElementById('run').click()");
+    await wait(
+      "document.getElementById('total').textContent==='2' && document.getElementById('cancel').disabled",
+    );
+    if ((await evaluate("document.getElementById('pass').textContent")) !== "2")
+      throw Error("Integration A/B source browser flows failed");
+    await writeFile(
+      join(work, "integration.png"),
+      Buffer.from(
+        (await call("Page.captureScreenshot", { format: "png" })).data,
+        "base64",
+      ),
+    );
+    await evaluate(
+      "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+    );
+    let integratedReport;
+    for (let i = 0; i < 50; i++) {
+      try {
+        integratedReport = JSON.parse(
+          await readFile(
+            join(downloads, "oauth-integration-report.json"),
+            "utf8",
+          ),
+        );
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    if (
+      integratedReport?.testingMode !== "integration" ||
+      integratedReport.environment !== "SOURCE_INTEGRATION" ||
+      integratedReport.results.length !== 2 ||
+      integratedReport.results.some(
+        (r) => r.status !== "PASS" || !r.sourceRevisions,
+      )
+    )
+      throw Error("Integration report lacks source verification");
+    const serialized = JSON.stringify(integratedReport);
+    if (
+      /me@gmail.com|stranger@gmail.com|g-1|g-2|client_secret\":|code_verifier\":|__Host-array_sso_session=|[?&](?:code|state)=/.test(
+        serialized,
+      )
+    )
+      throw Error("Integration report exposes credentials or personal data");
+  }
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({
@@ -740,6 +802,7 @@ try {
         "revision invalidates old results",
         "persisted profile and selection",
         "custom report target identity",
+        "credential-free source integration mode and A/B browser flows when installed",
         "attack mode capability outcomes, credential invalidation, redacted report and defense isolation",
       ],
       artifactDirectory: work,

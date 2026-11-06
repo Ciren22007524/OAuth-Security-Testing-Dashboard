@@ -1,5 +1,7 @@
 # array-line-demo 實際串接盤點
 
+實際整合更正（2026-11-06）：目前 `fc79f38` source 要求 `SSO_CLIENT_SECRET` 並用 `ClientSecretBasic`，不是前次盤點寫的 public client；新 runner 已以隔離 DCR 自動註冊後端 client 跑通，不需要手填 secret。請以 [整合 runner](INTEGRATION_RUNNER.md) 為最新操作依據。
+
 後續更新（2026-11-06）：最新查核 Array `fc79f38`／auth-service `337b1ce`；Array 新增後端 UserInfo 與 sub 比對，部署用 SSO_CLIENT_ID 不再固定在 vars，來源測試已為 14 組。以下 `7264cca`／9 組為前次紀錄；目前以 [新版 review](AUTH_SERVICE_REVIEW.md) 為準。
 
 查核日期：2026-11-04。這份文件依最新取得的原始碼，不再沿用舊版 auth-service 的 JSON＋refresh cookie 假設。

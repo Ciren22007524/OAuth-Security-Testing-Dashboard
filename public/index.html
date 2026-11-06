@@ -37,7 +37,8 @@
         <label class="mode-picker" for="testing-mode"
           >模式
           <select id="testing-mode" disabled>
-            <option value="defense">防禦驗證</option>
+            <option value="integration">整合驗測（自動準備）</option>
+            <option value="defense" selected>防禦驗證</option>
             <option value="attack">攻擊模擬</option>
           </select></label
         >
@@ -52,6 +53,7 @@
           </div>
         </details>
       </div>
+      <p id="integration-help" class="notice" hidden></p>
       <section class="metrics" aria-label="測試統計">
         <span>已完成 <strong id="total">0</strong></span>
         <span
