@@ -70,3 +70,9 @@ Node 測試也逐項對獨立 HTTP provider 執行所有情境，並以可重播
 `AUTH_SERVICE_PATH=/path/to/auth-service npm run test:auth-oidc-source` 執行最新標準 OIDC 全套來源回歸；本輪 `337b1ce` 170 項通過。舊 JSON／ES256 三項來源指令遇到新版會停止並提供新指令。
 
 `service-profiles.test.js` 檢查動態 RS256 JWKS、私鑰遮罩、跨 origin 拒絕、Array session cookie 與資料最小化，以及 HTML／錯誤 JSON／欄位不符不算 2xx 成功。瀏覽器測試包含協定保存、OIDC 排除 client_credentials、Array 切換為 session 專屬表單。
+
+## 免填參數的跨來源 Chromium 整合
+
+`npm run setup:integration` 後執行 `npm run test:integration`。A／B 各自跑真實來源的 DCR、登入、後端 token／UserInfo、session 與登出；各 10 項斷言通過，另外讓 store 不刪 session，確認重送舊 cookie 的斷言會失敗。Chrome 的虛擬 HTTPS 由 Fetch interception 路由，不繞過 Array CSP，不測正式 TLS／Google／DO。
+
+完整介面 regression 驗證整合模式不要求憑證、不使用選定 HTTP 目標、A／B 單項／批次、獨立檔名報告、來源 revision 與憑證／個資遮罩。`integration.test.js` 檢查未配置會停止、拒絕 API credential／fault／任意 sourcePath，以及 HTTP profile 不提供來源整合。

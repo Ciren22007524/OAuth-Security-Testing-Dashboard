@@ -1,3 +1,5 @@
+import { integrationCatalog, integrationReady } from "./integration-config.js";
+import { runIntegration } from "./integration-runner.js";
 import {
   createAttackRunner,
   getAttackCatalog,
@@ -30,6 +32,12 @@ export function createDashboardServer({
     }),
   };
   const modes = Object.freeze({
+    integration: {
+      catalogFor: (profile) =>
+        profile.type === "simulation" ? integrationCatalog : [],
+      run: (input, profile, options) =>
+        runIntegration(input.id, profile, options),
+    },
     defense: {
       catalogFor: (profile) =>
         profile.type === "simulation" ? catalog : getHttpCatalog(profile),
@@ -80,10 +88,13 @@ export function createDashboardServer({
           profile,
           testingMode: mode,
           catalog: modes[mode].catalogFor(profile),
+          ...(mode === "integration"
+            ? { integration: await integrationReady() }
+            : {}),
         });
       }
       if (req.method === "GET" && path === "/api/health")
-        return json(200, { ok: true, environment: "SIMULATION" });
+        return json(200, { ok: true, environment: "SIMULATION", busy: active });
       const profileMatch = /^\/api\/environments(?:\/([a-z0-9-]+))?$/.exec(
         path,
       );

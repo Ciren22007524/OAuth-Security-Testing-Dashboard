@@ -1,15 +1,45 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+export async function findBrowser() {
+  const paths = [
+    process.env.CHROMIUM_PATH,
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ...[
+      process.env.ProgramFiles,
+      process.env["ProgramFiles(x86)"],
+      process.env.LOCALAPPDATA,
+    ]
+      .filter(Boolean)
+      .flatMap((root) => [
+        join(root, "Google/Chrome/Application/chrome.exe"),
+        join(root, "Microsoft/Edge/Application/msedge.exe"),
+      ]),
+  ].filter(Boolean);
+  for (const path of paths) {
+    try {
+      await access(path);
+      return path;
+    } catch {}
+  }
+  throw new Error("找不到 Chrome／Chromium／Edge，請設定 CHROMIUM_PATH。");
+}
 export async function openBrowser() {
+  const executable = await findBrowser();
+  const listeners = new Map();
   const profile = await mkdtemp(join(tmpdir(), "oauth-source-browser-"));
   const chrome = spawn(
-    process.env.CHROMIUM_PATH || "/usr/bin/chromium",
+    executable,
     [
       "--headless",
-      "--no-sandbox",
+      ...(typeof process.getuid === "function" && process.getuid() === 0
+        ? ["--no-sandbox"]
+        : []),
       "--disable-dev-shm-usage",
       "--remote-debugging-port=0",
       `--user-data-dir=${profile}`,
@@ -68,6 +98,9 @@ export async function openBrowser() {
     let sequence = 0;
     ws.addEventListener("message", (event) => {
       const value = JSON.parse(event.data);
+      if (value.method)
+        for (const handler of listeners.get(value.method) || [])
+          Promise.resolve(handler(value.params)).catch(() => {});
       const request = pending.get(value.id);
       if (!request) return;
       pending.delete(value.id);
@@ -97,7 +130,12 @@ export async function openBrowser() {
     await call("Runtime.enable");
     await call("Page.enable");
     await call("Network.enable");
-    return { call, evaluate, close };
+    const on = (method, handler) => {
+      if (!listeners.has(method)) listeners.set(method, new Set());
+      listeners.get(method).add(handler);
+      return () => listeners.get(method)?.delete(handler);
+    };
+    return { call, evaluate, close, on };
   } catch (error) {
     await close();
     throw error;

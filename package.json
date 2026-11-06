@@ -18,7 +18,9 @@
     "test:auth-environments": "node scripts/auth-service-environments.mjs",
     "check": "node scripts/check.mjs",
     "test:array-source": "node scripts/array-source-smoke.mjs",
-    "test:auth-oidc-source": "node scripts/auth-oidc-source-smoke.mjs"
+    "test:auth-oidc-source": "node scripts/auth-oidc-source-smoke.mjs",
+    "test:integration": "node scripts/integration-smoke.mjs",
+    "setup:integration": "node scripts/setup-integration.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

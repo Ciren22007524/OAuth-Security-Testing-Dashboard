@@ -35,9 +35,21 @@ npm run test:browser
 
 ![本機 Web 介面](docs/screenshots/web-ui.png)
 
+## 直接跑免填參數的整合流程
+
+```sh
+npm ci
+npm run setup:integration
+npm start
+```
+
+開啟本機畫面，模式選「整合驗測（自動準備）」，選 A／B 或執行兩者。工具自動準備可拋棄 client、secret、code、PKCE 與 cookie，跑真正 auth-service／Array source＋Chromium 的登入、`/api/me`、登出與舊 session 撤銷。Google／儲存／limiter 使用隔離替身，未連正式站。詳見 [使用說明](docs/INTEGRATION_RUNNER.md)。
+
+![免填參數的來源整合](docs/screenshots/integration-ui.png)
+
 ## 建議操作方向
 
-日常驗測改以「獨立整合工作台」為目標：直接串接隔離的 auth-service 與 Array，自動準備測試 A／B、登入交易及憑證，手填參數保留為進階功能；不把任意身分切換加入正式 auth-service。分工與交付切片見 [操作設計](docs/TESTING_ARCHITECTURE.md)。一鍵整合流程尚未完成。
+日常驗測改以「獨立整合工作台」為目標：直接串接隔離的 auth-service 與 Array，自動準備測試 A／B、登入交易及憑證，手填參數保留為進階功能；不把任意身分切換加入正式 auth-service。分工與交付切片見 [操作設計](docs/TESTING_ARCHITECTURE.md)。目前已完成第一條 A／B 自動登入到登出流程；跨 client／外洩能力整合情境尚未實作。
 
 ## 最新服務相容性
 

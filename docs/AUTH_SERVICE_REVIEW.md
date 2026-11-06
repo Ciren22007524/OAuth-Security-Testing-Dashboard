@@ -1,5 +1,7 @@
 # auth-service 階段完成後的工具調整
 
+後續已完成第一條免填參數的 A／B source＋Chromium 整合流程；Array source 實際要求 Basic client secret，runner 自動註冊注入。前次 public-client 假設以 [整合 runner](INTEGRATION_RUNNER.md) 的實測更正為準。
+
 更新：2026-11-06。查核 auth-service `337b1ce`、array-line-demo `fc79f38`；這是原始碼版本，不等同正式部署或 D1 migration 已驗證。
 
 ## 本輪發現與已修正項目
