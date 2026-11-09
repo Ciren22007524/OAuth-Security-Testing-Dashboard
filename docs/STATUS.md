@@ -8,7 +8,7 @@
 
 - 已完成 Node SEA 打包：內嵌 runtime、CSS／JS／HTML、測試服務及授權；動態 loopback 埠、自動開瀏覽器，不需使用者安裝 Node 或操作 npm。
 - Windows 環境設定保存到 `%LOCALAPPDATA%\OAuthSecurityLab\environments.json`；Linux 可攜式使用使用者 config 目錄，原始碼 CLI 仍用 `.local/`。
-- 本輪新增共用 `src/application.js` 與 desktop 入口；原有 Node CLI／API 行為保留。已納入另一位 agent 的 main `3b9b99b`／PR #1 Node 24 JWKS 相容性修正，未覆蓋其 `.nvmrc` 與進度紀錄。
+- 本輪新增共用 `src/application.js` 與 desktop 入口；原有 Node CLI／API 行為保留。已納入另一位 agent 的 main `31daf91`／PR #1 Node 24 JWKS 相容性修正，未覆蓋其 `.nvmrc` 與進度紀錄。
 - 版本為 `0.2.0-preview.1`。Windows x64 EXE／ZIP 已在 Linux 交叉產生，驗證 PE／SEA 嵌入、官方 Node SHA-256、無失效的原廠簽章及 ZIP 完整性；這不是 Windows 執行驗證。
 - Linux 單檔實際執行 smoke 通過；專案外啟動、內嵌樣式／JS、23 情境、實際單項測試與設定保存的 Chromium 驗證通過，截圖在 `docs/screenshots/portable-ui.png`。
 - 最新語法檢查 24 模組、61 個測試通過；原根／子路徑、環境 CRUD 等瀏覽器流程也通過，file: 渲染仍為政策跳過。
@@ -18,7 +18,7 @@
 
 ## 本輪交接盤點（2026-11-04）
 
-- 基準：`main` @ `702dad4d8a19d0902ee61916d4172aeac0d83dd9`。本輪開始時 HEAD 與 origin/main 一致，工作樹乾淨；本輪只整理文件。
+- 基準：`main` @ `ddad370f6660643d72933304cf89dde3b330667a`。本輪開始時 HEAD 與 origin/main 一致，工作樹乾淨；本輪只整理文件。
 - 實際工作目錄為雲端 `/workspace/OAuth-Security-Testing-Dashboard`。入口只監聽 `127.0.0.1`，Host 僅接受 localhost／127.0.0.1，寫入 Origin 以 HTTP Host 比對。
 - 使用者自己電腦的 localhost 不是此雲端工作區。倉庫未提供已驗證的雲端部署設定或公開網址；不能把檔案預覽、Git 推送或本機測試稱為對外部署完成。
 - 本輪重跑：語法檢查通過（17 個 JS 模組）；58 個測試通過，0 失敗／跳過／取消；完整 Chromium 操作流程通過（模擬測量 22 PASS／1 INCONCLUSIVE）；資源檢查 6 項通過、file: 渲染 1 項受政策限制跳過。
@@ -85,9 +85,16 @@
 
 ## PR #2 與分支整理（2026-11-04）
 
-- PR #2 的 head 為 `334bdb27ed726bc3e999428f8ecaa415825caa16`，只有 STATUS／handoff 文件，基準是較舊的 main。
+- PR #2 的 head 為 `136ad8561c807d149b3953e52d71c1ce755daebf`，只有 STATUS／handoff 文件，基準是較舊的 main。
 - 保留 main 較新的完整專案／Windows 預覽交接，整合舊 PR 仍有效的待辦，不用舊專項交接覆蓋現況。本輪沒有修改應用或 CI 工作流程。
 - 盤點時有 main、6 個已合併功能分支及 PR #2 交接分支。清理前已建立並驗證完整 Git bundle；確認 commit 可由 main 到達後才刪除分支，版本 tag 保留。
+
+## Commit 身份改寫（2026-11-09）
+
+- 依使用者要求，將 main 與 `feature-simplify-test-workspace` 歷史中的作者、committer 及 tagger 由個人 gmail 與 `Claude <noreply@anthropic.com>` 統一改為 GitHub noreply 身份 `JhongCiRen <157352341+Ciren22007524@users.noreply.github.com>`，並 force-push。檔案內容與 commit 數量不變，但所有 commit 編號都已改變；文件中引用的舊編號已改為新編號（例如 PR #1 合併 `3b9b99b` → `31daf91`）。
+- `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13` 是 auth-service repo 的版本，不受影響。
+- 未完成：tag `v0.2.0-preview.1` 推送被 GitHub 以 403 拒絕，仍指向改寫前的舊 commit；改寫後對應的 commit 為 `6efd8a9`，需由使用者在本機重推。PR #1、#2 頁面仍保留舊 commit。
+- 其他電腦或 agent 的既有 clone 需重新 clone，或確認沒有未推送工作後再 `git reset --hard origin/<分支>`。
 
 ## 下一步
 
