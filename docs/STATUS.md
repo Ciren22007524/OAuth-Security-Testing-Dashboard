@@ -172,6 +172,8 @@ Windows CI 與預覽 Release 已確認成功（見上方「目前狀態」），
 
 - 使用者在本機把 tag `v0.2.0-preview.1` 重推到改寫後的 `6efd8a9`（這是 gmail 唯一還留在 repo 中的地方）。
 - 使用者在 Windows 實機雙擊 EXE，確認自動開啟介面與設定保存。
+- **進行中（已交接給 Codex，見 `docs/handoff.md`）**：在來源整合 runner 加入 Array 負向情境——callback 缺登入 cookie、state 不符、callback 重播、logout 錯誤 Origin、logout 缺／錯 csrf，各自先建立有效對照再判讀，並盡量配一個 harness 層的負向控制。對應 `ARRAY_LINE_DEMO.md`「Dashboard 接下來的實作順序」第 3 點。Array 原始碼自身的測試（`test:array-source`）已涵蓋 state、重播與 ID token claims，這項是補 Dashboard 端的整合情境。
+- 文件與測試對照（2026-11-09 盤點）：`npm test`（CI 執行）涵蓋攻擊模式 10 個情境與 4 個弱化控制、協定分流、環境管理與 23 個模擬情境；`test:integration`、`test:array-source`、`test:auth-oidc-source`、`test:browser` 需本機原始碼或 Chromium，不在 CI。`COMPROMISED_CLIENT.md` 的跨 client／外洩情境與 `ACCEPTANCE_FLOW.md` 的驗收清單仍未實作。
 - 檢視一般 CI 是否改由 `.nvmrc` 讀 Node 版本：目前 CI 為 `24`、`.nvmrc` 為 `24.5.0`；Windows Release 固定 `24.19.0`。統一前需確認 SEA 建置與版本相容性，本輪未把這項工作標為完成。
 - 帶 session 的遠端輪替／撤銷測試：需先決定隔離測試身份與 session 注入方式。
 - TypeScript 型別檢查或 lint 是否需要另行決定，並非本輪分支清理的修改範圍。
