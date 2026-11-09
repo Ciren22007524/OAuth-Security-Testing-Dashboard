@@ -2,21 +2,15 @@
 
 以可追溯的 HTTP 證據學習與測試 OAuth 協定的本機安全實驗台。介面採繁體中文，包含情境分類、斷言結果、遮罩後的請求／回應、取消執行與 JSON / Markdown 報告。
 
-## 先看介面：Windows 可攜式預覽
-
-在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
-
-這裡的 localhost 是使用者自己電腦上的內建服務，不是雲端工作區。會自動選擇可用埠號；環境設定保存在使用者的 AppData，不會寫進 EXE 或雲端 repo。
-
-![可攜式程式的實際介面預覽](docs/screenshots/portable-ui.png)
-
-截圖來自 Linux 單檔程式的實際瀏覽器驗證。Windows 預覽尚未程式碼簽章；Release 工作流程會在 Windows runner 實際執行獨立 EXE smoke test，通過後才發布。請參閱 [使用說明](docs/WINDOWS-QUICKSTART.txt)，不要把本機打包成功當作 Windows CI 已通過。
-
 ## 啟動
+
+目前以下載原始碼、在自己的電腦啟動 Web 服務為主，方便直接修改 `public/` 的畫面。
 
 從原始碼執行需要 Node.js 24.5 以上；應用執行期只用 Node 內建模組，不需設定憑證。打包開發工具由 `npm ci` 按 lockfile 安裝。
 
 ```sh
+git clone https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard.git
+cd OAuth-Security-Testing-Dashboard
 npm start
 ```
 
@@ -32,6 +26,62 @@ npm test
 # 已安裝 Chromium 時，另可驗證完整介面流程
 npm run test:browser
 ```
+
+## 目前介面
+
+頁首顯示目前環境名稱與目標摘要；點擊可開啟環境面板，切換、新增或編輯環境。選擇環境後，可搜尋／篩選情境，執行單項或全部測試，直接查看斷言及 HTTP 證據。執行紀錄、測試前提與報告匯出收在展開操作中；「未通過」與「執行錯誤」分開統計。結果只保留在目前頁面，重新整理會清空。
+
+桌面版工作區固定在視窗內，左側情境與右側結果各自捲動；HTTP 回應隨右欄展開並自動換行，不再有額外的內層捲軸。切換情境會回到結果頂部。
+
+![本機 Web 介面](docs/screenshots/web-ui.png)
+
+## 直接跑免填參數的整合流程
+
+```sh
+npm ci
+npm run setup:integration
+npm start
+```
+
+開啟本機畫面，模式選「整合驗測（自動準備）」，選 A／B 或執行兩者。工具自動準備可拋棄 client、secret、code、PKCE 與 cookie，跑真正 auth-service／Array source＋Chromium 的登入、`/api/me`、登出與舊 session 撤銷。Google／儲存／limiter 使用隔離替身，未連正式站。詳見 [使用說明](docs/INTEGRATION_RUNNER.md)。
+
+![免填參數的來源整合](docs/screenshots/integration-ui.png)
+
+## 建議操作方向
+
+日常驗測改以「獨立整合工作台」為目標：直接串接隔離的 auth-service 與 Array，自動準備測試 A／B、登入交易及憑證，手填參數保留為進階功能；不把任意身分切換加入正式 auth-service。分工與交付切片見 [操作設計](docs/TESTING_ARCHITECTURE.md)。目前已完成第一條 A／B 自動登入到登出流程；跨 client／外洩能力整合情境尚未實作。
+
+## 最新服務相容性
+
+HTTP 環境可選 `auth-service（標準 OIDC／RS256）`、`Array SSO Worker（本站 session）` 或舊版相容協定。工具依服務篩選情境；泛用資源成功需符合 JSON 與指定資料欄位，不以 200 當成功。最新契約差異、來源回歸指令及未完成項目見 [auth-service review](docs/AUTH_SERVICE_REVIEW.md)。
+
+## array-test 整合驗收
+
+已找到 [array-line-demo](https://github.com/Ciren22007524/array-line-demo)，核對其 Cloudflare SSO Worker 使用 public client＋PKCE，瀏覽器以本站 HttpOnly session 存取 `/api/me`。可用 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source` 重跑已通過的 9 組來源測試；實際契約與驗收順序見 [Array 串接盤點](docs/ARRAY_LINE_DEMO.md)。
+
+目前通用情境尚未接入這個專用 adapter，不能將來源／fixture 測試當成正式站驗收完成。下一階段以「分清應用／身分服務／API → 建立正常登入與受保護資料對照 → 逐項攻擊 → 證據與報告」落實，流程、現有差距與驗收清單見 [整合驗測流程](docs/ACCEPTANCE_FLOW.md)。
+
+## 防禦驗證與攻擊模擬
+
+保留原有防禦驗證，透過「模式」切換攻擊者視角。攻擊模式有 10 個可執行情境，涵蓋 client secret、access token、refresh token、授權碼重播與 PKCE。**環境只選目標，參數在各情境右側表單獨立填寫**；不共用憑證，也不自動沿用環境的 client ID。
+
+選擇情境、填參數後按「執行此情境」。更改參數只清除該情境結果，草稿與憑證不存入環境設定或報告。
+
+操作、OIDC 支援範圍與情境擴充方式見 [攻擊模式](docs/ATTACK_MODE.md)。這不是完整 OIDC conformance 或使用者冒用驗證。
+
+![攻擊者能力模擬介面](docs/screenshots/attack-ui.png)
+
+## 選用：Windows 可攜式預覽
+
+在 [Releases](https://github.com/Ciren22007524/OAuth-Security-Testing-Dashboard/releases) 下載 Windows x64 預覽 ZIP，解壓後雙擊 `OAuthSecurityLab-windows-x64.exe`。程式內嵌 Node、前端及測試服務，不需安裝 Node 或輸入 npm 指令；啟動後自動開啟瀏覽器，使用期間保留程式視窗即可。
+
+這裡的 localhost 是使用者自己電腦上的內建服務，不是雲端工作區。會自動選擇可用埠號；環境設定保存在使用者的 AppData，不會寫進 EXE 或雲端 repo。
+
+舊版可攜式預覽截圖：
+
+![舊版可攜式程式介面](docs/screenshots/portable-ui.png)
+
+截圖來自 Linux 單檔程式的實際瀏覽器驗證。Windows 預覽尚未程式碼簽章；Release 工作流程會在 Windows runner 實際執行獨立 EXE smoke test，通過後才發布。請參閱 [使用說明](docs/WINDOWS-QUICKSTART.txt)，不要把本機打包成功當作 Windows CI 已通過。
 
 ## 打包單檔執行檔
 

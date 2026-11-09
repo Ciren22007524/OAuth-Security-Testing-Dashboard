@@ -2,7 +2,71 @@
 
 更新：2026-11-04
 
-## 最新交付優先：Windows 可攜式預覽（2026-11-04）
+## 已交付免填參數的第一條整合流程（2026-11-06）
+
+- 新增整合驗測模式，使用 A／B 各自的真實 auth-service／Array source 與 Chromium，自動註冊 confidential client、注入當次 secret、準備完整登入交易與 cookie；不用手填參數。
+- 正常登入、後端 UserInfo、/api/me、cookie 屬性、本站登出及舊 session 401 已跑通；故意不撤銷 session 的負向控制可被抓出。UI 單項／批次與來源版號報告驗證通過。
+- `npm run setup:integration` 取得固定來源與依賴；`npm run test:integration` 重跑正反向控制。來源由工具自己的 ignored 快取或一次指定的 checkout 提供，不修改上游。
+- 更正前次 public client 假設：目前實際 source 要求 Array 後端 `SSO_CLIENT_SECRET`／Basic，runner 以隔離 DCR 自動處理，不把 secret 交給使用者搬動。
+- 驗證：43 個 JS 模組語法檢查、86 個 Node 測試通過；A／B 各 10 個整合斷言、負向撤銷控制與取消清理通過，完整 Chromium UI／報告及 6 項資源檢查通過（file: 1 項受政策跳過）。
+- 實際 Google／Cloudflare／網路 TLS 未驗收；跨 client、外洩能力、真正 RCE 隔離仍待做。說明見 `INTEGRATION_RUNNER.md` 與 `COMPROMISED_CLIENT.md`。
+
+## 最新 review 與相容性修正（2026-11-06）
+
+- 已更新查核 auth-service `337b1ce`、Array `fc79f38`，來源測試分別為 170 項／14 組通過；不是正式部署驗收。
+- HTTP 環境新增標準 OIDC／Array session／舊版分流；discovery 動態端點與 RSA RS256，Array /api/me schema、cookie 遮罩與對應情境已接入。舊來源指令拒絕標準 OIDC checkout，新增 `test:auth-oidc-source`。
+- 泛用資源需要成功識別欄位與 JSON 證據，避免 HTML／錯誤頁／WAF 假成功；支援 OIDC resource 參數與 public client none 認證。
+- 工具 36 模組語法檢查、85 項 Node、完整 Chromium 流程與資源 6 項通過；file: 因政策跳過 1 項。
+- 使用者指出手填參數操作繁瑣；建議保留獨立工作台，直接串接隔離的真實服務並自動準備 A／B 與交易，不把任意身分／攻擊控制放進正式 auth-service。
+- 詳細差異見 `AUTH_SERVICE_REVIEW.md`，後續一鍵整合方向見 `TESTING_ARCHITECTURE.md`。一鍵服務啟動與多使用者瀏覽器流程尚未實作。
+
+## 已找到並查核 Array 實際專案（2026-11-04）
+
+- `Ciren22007524/array-line-demo` @ `7264cca`；目前預設為 `cloudflare/sso-test` Worker。`auth-service` 最新查核為 `4b5473b`，已是標準 OIDC，舊 JSON＋refresh cookie checkout 不再代表現況。
+- Array client 為 `array`、認證 `none`、S256 PKCE；瀏覽器只有本站 HttpOnly session，`/api/me` 依 session 讀取使用者，沒有 Bearer token 登入分支。本站登出保留 issuer／Google SSO。
+- 新增 `test:array-source`，針對 Array 真實 `createApp` 的既有隔離測試執行，9 組全通過；輸出 Git revision、計數與驗證範圍。未對正式網域發送驗測請求、未部署、未修改上游 repo。
+- 契約、限流門檻、具體 callback／cookie／logout 情境與下一階段 adapter 見 `ARRAY_LINE_DEMO.md`；Dashboard UI 尚未接入專用 session／瀏覽器 adapter。
+
+## 目前驗收方向：array-test × auth-service（2026-11-04）
+
+- 本輪重新 review 驗測流程，新增 `ACCEPTANCE_FLOW.md`，明確區分設計、現有功能與尚未完成的實際整合；本輪沒有宣稱完成 array-test 驗收。
+- 先補三個 P0：多角色目標與憑證路由、實際登入／token／cookie 契約 adapter、有效的正常登入與 API 資料對照；資源 2xx 不足以作成功證據，還需 API 契約驗證。
+- 現有 10 個攻擊情境／80 項測試屬本機與 loopback fixture 證據；後續已找到 Array repo、名義來源與最新 source 契約；部署與真實登入仍未驗收。
+- 第一個完整驗收切片固定為：正常登入 → 正常 API 對照 → 未登入／持有 token 比較 → 明確結果 → 遮罩報告。後續 callback、跨權限、輪替、瀏覽器跨站類情境依實際支援接入。
+
+## 最新調整：10 個攻擊情境與獨立參數（2026-11-04）
+
+- 移除共用憑證面板；依情境 schema 在右側產生獨立表單，環境只提供目標，不沿用其 client ID。每項草稿、結果各自隔離，修改只清除本項結果；目標／模式切換清除攻擊資料。
+- 攻擊模式改為逐項執行，涵蓋 secret 取 token／讀資源／擴大 scope、access token 讀資源／UserInfo、refresh 交換／重用、授權碼交換／重播／省略 verifier，共 10 個實際操作。
+- 重播、scope 與 PKCE 判讀使用有效對照；無效或過期原始憑證不能算成已證明防護。fixture 放寬這四種控制時可辨識為操作成功。
+- 前端表單與後端校驗共用 catalog schema，非此情境的欄位會拒絕；憑證／個人資料不進報告，攻擊模式的環境表單只顯示目標設定。
+- 本輪驗證：31 個 JS 模組語法檢查、80 個 Node 測試、桌面／筆電／手機完整流程及十項攻擊逐項執行、6 項資源載入檢查通過；file: 渲染仍因管理政策跳過 1 項。
+- 完整操作、具體副作用、請求上限與未涵蓋範圍見 `ATTACK_MODE.md`。沒有執行正式 OIDC provider 驗收。
+
+## 前一版：可切換防禦與攻擊模式（2026-11-04）
+
+- 原有防禦模式及 23 個模擬／10 個 HTTP 情境保留，將集中條件鏈拆為獨立 handler 註冊表；模式也以註冊表派送，增加情境不需擴充主條件鏈。
+- 新增持有 client secret 的兩項攻擊者能力模擬：取得 Bearer access token、以未登入對照確認能否讀取指定資源。支援同 origin OIDC discovery、client_secret_basic／post、scope 與 token 路徑設定。
+- 能力結果獨立為 SUCCEEDED／BLOCKED／INCONCLUSIVE／ERROR，不反轉既有 PASS／FAIL；攻擊成功是否構成漏洞仍依 client 授權政策判讀。
+- 臨時 secret 不進環境設定、storage、紀錄或報告；取得的 token 不回傳，不保留資源完整內容。憑證變更清空攻擊結果，離開模式／切換環境清除 secret。
+- 本輪驗證：29 個 JS 模組語法檢查、72 個 Node 測試、完整桌面／筆電／手機 Chromium 流程與 6 項資源檢查通過；file: 渲染因管理政策跳過 1 項。防禦模擬仍為 22 PASS／1 INCONCLUSIVE。
+- 未加入授權碼＋PKCE、使用者憑證與 session 攻擊；未執行正式 OIDC provider 或 Google 登入驗收。完整操作與限制見 `ATTACK_MODE.md`。
+
+## 目前優先：本機 Web 與介面精簡（2026-11-04）
+
+使用者改採下載原始碼，在自己的電腦啟動 Web 服務；Windows EXE 與雲端部署保留為選用方案，下方歷史優先序不代表目前阻擋項目。
+
+- 移除同頁側欄、宣傳口號、重複統計與固定底列；以選環境、執行情境、查看結果為主。
+- 情境清單不再展示可能被誤認為漏洞判定的 HIGH／MEDIUM；執行結果的 FAIL 與 ERROR 分開統計。
+- 技術前提與執行紀錄預設收合；保留必要測試範圍說明、斷言與逐筆 HTTP 證據。
+- 環境設定收進 header：平時只顯示環境名稱與目標摘要，點擊以 dialog 放大切換／管理，完整範圍說明保留在面板中。支援 Escape 關閉、焦點返回與手機寬度；新增／編輯關閉後回到環境面板，不推動工作區。
+- 桌面採固定視窗高度的雙欄工作區：左側清單與右側結果各自捲動，搜尋與執行控制保留在原位；HTTP response 取消內層捲軸，長文字自動換行。手機維持自然頁面排版。
+- 以實際 Chromium 滾輪驗證左右捲動隔離與邊界，長 response 在 1440×1100、1280×720 均不帶動整頁；展開執行紀錄不撐長頁面，切換情境重設結果捲動位置。
+- 自動選取第一個情境，分類依目前環境提供，篩選後的詳情與選取同步；環境 CRUD、設定版本隔離及匯出維持原行為。
+- 本機啟動方式與最新 Web 截圖見 README。此輪未重建或發布既有 EXE。
+- 驗證：24 個 JS 模組語法檢查、61 個 Node 測試、完整桌面／手機 Chromium 流程及 6 項資源載入檢查通過；file: 渲染因管理政策跳過 1 項。模擬情境仍為 22 PASS／1 INCONCLUSIVE。
+
+## 歷史交付：Windows 可攜式預覽（2026-11-04）
 
 使用者在要求完整交接後，新增優先需求：提供可雙擊的 Windows Release EXE，先在自己電腦看介面，不先處理雲端網站部署。
 

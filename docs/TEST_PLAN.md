@@ -2,11 +2,23 @@
 
 ## 自動驗證
 
-使用 `npm test` 執行 Node test runner。情境逐一執行並驗證非空斷言、實際請求預算、清理與遮罩。另以刻意允許錯誤 redirect 的 fixture 驗證測試能產生 FAIL，而非固定顯示成功。
+使用 `npm test` 執行 Node test runner。防禦情境逐一執行並驗證非空斷言、實際請求預算、清理與遮罩。另以刻意允許錯誤 redirect 的 fixture 驗證測試能產生 FAIL，而非固定顯示成功。
 
 測試涵蓋有效授權與 callback 正向流程、錯誤 client、四種 redirect 變體、state 空值／長度、callback cookie 不符／缺少／重播／到期、token Origin、session 缺少／錯誤／到期、並行 rotation、30,000ms 寬限與 30,001ms 撤銷、ES256 payload／signature／issuer／audience／expiration。亦驗證取消、未知情境、報告遮罩與控制 API 的跨 Origin／外部 target 拒絕。
 
 HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets、catalog 並透過 API 執行情境；不僅檢查 port 或 PID。
+
+## Array 真實來源驗證
+
+執行 `ARRAY_DEMO_PATH=/path/to/array-line-demo npm run test:array-source`。最新查核 Array `fc79f38`，14 組既有來源測試通過，涵蓋真實 Worker 的登入、session、callback、claims、簽章、CSRF、登出及入口限流。OIDC fetch／store／limiter 為隔離替身，不代表正式 Google、瀏覽器 cookie 或 Cloudflare runtime 已驗收。契約與完整流程見 [Array 串接盤點](ARRAY_LINE_DEMO.md)。
+
+## 攻擊模式驗證
+
+`test/attack.test.js` 驗證本地與真實 loopback HTTP target 的 discovery、Basic／POST client 認證、token 交換及資源讀取。包括公開資源對照、OAuth 拒絕與不明回應分類、跨 origin endpoint 與重新導向不轉送憑證、反射 secret／token／Cookie 不出現在證據、請求上限、限流、取消與環境檔不保存憑證。另檢查防禦 catalog 的每項情境均有明確註冊 handler。
+
+Chromium 流程逐項執行全部 10 個攻擊情境，檢查 schema 對應表單、草稿互不混用、修改只清除本項結果、必填校驗、環境 client ID 不繼承、攻擊報告遮罩、離開模式清除草稿，以及原有防禦結果隔離。
+
+Node 測試也逐項對獨立 HTTP provider 執行所有情境，並以可重播 code、可重用 refresh、可省略 verifier、可新增 scope 的刻意弱化 fixture 驗證成功路徑；無效對照必須回 INCONCLUSIVE。正式 OIDC provider、Google 登入與完整 OIDC conformance 尚未驗證。
 
 ## 手動介面驗證
 
@@ -18,7 +30,7 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 
 ## 不在目前驗證範圍
 
-已唯讀核對 auth-service commit `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13`：client state 上限 512、provider state 由伺服器產生、`__Host-oauth_state` 的 10 分鐘交易、callback 到期導回 `login_expired`，以及寬限期內不再次換 cookie。模擬器沿用這些邊界，但以 JSON 正規化錯誤（正式 authorize / callback 使用 HTML），省略清除 cookie、真實 provider、D1、PKCE 與身份 allowlist。它仍不能當成 production 測試結果。
+已唯讀核對 auth-service commit `37ea8ca82b120a6fadfc9d81082aa920f5cf4e13`：client state 上限 512、provider state 由伺服器產生、`__Host-oauth_state` 的 10 分鐘交易、callback 到期導回 `login_expired`，以及寬限期內不再次換 cookie。原有防禦模擬器沿用這些邊界，但以 JSON 正規化錯誤（正式 authorize / callback 使用 HTML），省略清除 cookie、真實 provider、D1、PKCE 與身份 allowlist。它仍不能當成 production 測試結果。
 
 沒有連接正式 auth-service 或真實 Google、Cloudflare D1。沒有瀏覽器 CORS / SameSite / Secure cookie 的實證。模擬器已提供 logout、JWKS、discovery 與固定窗口限流；另有真實 Hono 原始碼與 Chromium 的隔離本機整合驗證，見 `LOCAL_INTEGRATION.md`。
 
@@ -52,3 +64,15 @@ HTTP 端對端測試啟動真實 loopback dashboard 與 fixture，取得 assets�
 - 已將 main PR #1 的 Node 24 JWKS 修正納入並重新跑 61 個測試／重建；沒有覆蓋他人的修改。
 - Windows x64 成品已交叉產生、核對 PE／SEA 與官方 Node checksum；未在本機執行 Windows EXE。Windows 工作流程通過才會發布 preview Release，狀態需查 GitHub，不能將本機 build 當作 Windows CI 通過。
 - 原有根／子路徑與完整瀏覽器流程在共用服務拆分後已通過；新增 Node 24 相容性修正後再通過 portable smoke／browser，未改動前端外觀。
+
+## 新版 auth-service 與協定分流
+
+`AUTH_SERVICE_PATH=/path/to/auth-service npm run test:auth-oidc-source` 執行最新標準 OIDC 全套來源回歸；本輪 `337b1ce` 170 項通過。舊 JSON／ES256 三項來源指令遇到新版會停止並提供新指令。
+
+`service-profiles.test.js` 檢查動態 RS256 JWKS、私鑰遮罩、跨 origin 拒絕、Array session cookie 與資料最小化，以及 HTML／錯誤 JSON／欄位不符不算 2xx 成功。瀏覽器測試包含協定保存、OIDC 排除 client_credentials、Array 切換為 session 專屬表單。
+
+## 免填參數的跨來源 Chromium 整合
+
+`npm run setup:integration` 後執行 `npm run test:integration`。A／B 各自跑真實來源的 DCR、登入、後端 token／UserInfo、session 與登出；各 10 項斷言通過，另外讓 store 不刪 session，確認重送舊 cookie 的斷言會失敗。Chrome 的虛擬 HTTPS 由 Fetch interception 路由，不繞過 Array CSP，不測正式 TLS／Google／DO。
+
+完整介面 regression 驗證整合模式不要求憑證、不使用選定 HTTP 目標、A／B 單項／批次、獨立檔名報告、來源 revision 與憑證／個資遮罩。`integration.test.js` 檢查未配置會停止、拒絕 API credential／fault／任意 sourcePath，以及 HTTP profile 不提供來源整合。

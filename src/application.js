@@ -1,7 +1,14 @@
+import { integrationCatalog, integrationReady } from "./integration-config.js";
+import { runIntegration } from "./integration-runner.js";
+import {
+  createAttackRunner,
+  getAttackCatalog,
+  validateAttackInput,
+} from "./attack-runner.js";
 import { createServer } from "node:http";
 import { catalog, runScenario } from "./runner.js";
 import { createEnvironmentStore, EnvironmentError } from "./environments.js";
-import { createHttpRunner, httpCatalog } from "./http-runner.js";
+import { createHttpRunner, getHttpCatalog } from "./http-runner.js";
 
 export function createDashboardServer({
   environmentsFile,
@@ -13,6 +20,41 @@ export function createDashboardServer({
   let active = false;
   const environments = createEnvironmentStore(environmentsFile);
   const runHttp = createHttpRunner({ minimumInterval: httpInterval });
+  const runAttack = createAttackRunner({ minimumInterval: httpInterval });
+  const defenseRunners = {
+    http: runHttp,
+    simulation: async (id, profile, options) => ({
+      ...(await runScenario(id, options)),
+      environmentId: profile.id,
+      environmentName: profile.name,
+      environmentRevision: profile.revision,
+      configuration: profile,
+    }),
+  };
+  const modes = Object.freeze({
+    integration: {
+      catalogFor: (profile) =>
+        profile.type === "simulation" ? integrationCatalog : [],
+      run: (input, profile, options) =>
+        runIntegration(input.id, profile, options),
+    },
+    defense: {
+      catalogFor: (profile) =>
+        profile.type === "simulation" ? catalog : getHttpCatalog(profile),
+      run: (input, profile, options) =>
+        defenseRunners[profile.type](input.id, profile, options),
+    },
+    attack: {
+      catalogFor: getAttackCatalog,
+      run: (input, profile, options) =>
+        runAttack(input.id, profile, input.attack, options),
+    },
+  });
+  function testingMode(value = "defense") {
+    if (typeof value !== "string" || !Object.hasOwn(modes, value))
+      throw new EnvironmentError("invalid_testing_mode");
+    return value;
+  }
   return createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -37,15 +79,22 @@ export function createDashboardServer({
         const profile = await environments.get(
           url.searchParams.get("environmentId") || "local",
         );
+        const mode = testingMode(
+          url.searchParams.get("testingMode") || "defense",
+        );
         return json(200, {
           environment:
             profile.type === "simulation" ? "SIMULATION" : "CUSTOM_HTTP",
           profile,
-          catalog: profile.type === "simulation" ? catalog : httpCatalog,
+          testingMode: mode,
+          catalog: modes[mode].catalogFor(profile),
+          ...(mode === "integration"
+            ? { integration: await integrationReady() }
+            : {}),
         });
       }
       if (req.method === "GET" && path === "/api/health")
-        return json(200, { ok: true, environment: "SIMULATION" });
+        return json(200, { ok: true, environment: "SIMULATION", busy: active });
       const profileMatch = /^\/api\/environments(?:\/([a-z0-9-]+))?$/.exec(
         path,
       );
@@ -101,14 +150,25 @@ export function createDashboardServer({
           const profile = await environments.get(
             input.environmentId || "local",
           );
-          const selectedCatalog =
-            profile.type === "simulation" ? catalog : httpCatalog;
+          const mode = testingMode(input.testingMode);
+          const selectedCatalog = modes[mode].catalogFor(profile);
+          const allowedFields = [
+            "id",
+            "environmentId",
+            "environmentRevision",
+            "testingMode",
+            ...(mode === "attack" ? ["attack"] : []),
+          ];
+          if (mode === "attack") {
+            try {
+              validateAttackInput(input.attack, input.id);
+            } catch {
+              return json(400, { error: "invalid_attack_input" });
+            }
+          }
           if (
             !selectedCatalog.some((s) => s.id === input.id) ||
-            Object.keys(input).some(
-              (k) =>
-                !["id", "environmentId", "environmentRevision"].includes(k),
-            )
+            Object.keys(input).some((k) => !allowedFields.includes(k))
           )
             return json(400, { error: "invalid_scenario" });
           if (
@@ -123,17 +183,9 @@ export function createDashboardServer({
           });
           return json(
             200,
-            profile.type === "http"
-              ? await runHttp(input.id, profile, { signal: controller.signal })
-              : {
-                  ...(await runScenario(input.id, {
-                    signal: controller.signal,
-                  })),
-                  environmentId: profile.id,
-                  environmentName: profile.name,
-                  environmentRevision: profile.revision,
-                  configuration: profile,
-                },
+            await modes[mode].run(input, profile, {
+              signal: controller.signal,
+            }),
           );
         } finally {
           active = false;

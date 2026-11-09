@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dashboardServer } from "../src/server.js";
 import { catalog } from "../src/runner.js";
+import { attackCatalog } from "../src/attack-runner.js";
 import { createFixture } from "../src/fixture.js";
 const scenarioCount = catalog.length;
 const passCount = scenarioCount - 1;
@@ -94,6 +95,137 @@ try {
     }
     throw Error(`Timeout: ${expression}`);
   };
+  async function checkCatalogScrolling() {
+    await evaluate(
+      "document.getElementById('catalog').scrollIntoView({block:'center'});document.getElementById('catalog').scrollTop=0",
+    );
+    const before = await evaluate(
+      "({page:scrollY, x:document.getElementById('catalog').getBoundingClientRect().left+40,y:document.getElementById('catalog').getBoundingClientRect().top+40})",
+    );
+    const wheel = () =>
+      call("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: before.x,
+        y: before.y,
+        deltaX: 0,
+        deltaY: 300,
+      });
+    await wheel();
+    await wait("document.getElementById('catalog').scrollTop>0");
+    if (await evaluate(`scrollY!==${before.page}`))
+      throw Error("Catalog wheel scrolled page");
+    await evaluate(
+      "document.getElementById('catalog').scrollTop=document.getElementById('catalog').scrollHeight",
+    );
+    await wheel();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await evaluate(`scrollY!==${before.page}`))
+      throw Error("Catalog boundary chained scrolling to page");
+    await evaluate(
+      "document.getElementById('catalog').scrollTop=0;window.scrollTo(0,0)",
+    );
+  }
+  async function checkResponseScrolling() {
+    // A long response must use the detail column's scroll area, never a nested pre.
+    await evaluate(String.raw`(() => {
+      const pre = document.querySelector('.evidence-item pre');
+      pre.dataset.original = pre.textContent;
+      pre.textContent += '\n' + 'long-response-line '.repeat(30).concat('\n').repeat(100);
+      document.querySelector('.detail').scrollTop = 0;
+    })()`);
+    const layout = await evaluate(`(() => {
+      const panel = document.querySelector('.detail');
+      const pre = document.querySelector('.evidence-item pre');
+      panel.scrollTop = pre.offsetTop;
+      const rect = panel.getBoundingClientRect();
+      return {x:rect.left+80, y:rect.top+rect.height/2, top:panel.scrollTop, catalog:document.getElementById('catalog').scrollTop,
+        fits:document.documentElement.scrollHeight<=innerHeight && rect.bottom<=innerHeight,
+        nested:getComputedStyle(pre).overflowY};
+    })()`);
+    if (!layout.fits || layout.nested !== "visible")
+      throw Error("Response layout has page or nested scrolling");
+    await call("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: layout.x,
+      y: layout.y,
+      deltaX: 0,
+      deltaY: 300,
+    });
+    await wait(`document.querySelector('.detail').scrollTop>${layout.top}`);
+    if (
+      await evaluate(
+        `scrollY!==0 || document.getElementById('catalog').scrollTop!==${layout.catalog}`,
+      )
+    )
+      throw Error("Response wheel moved page or catalog");
+    await evaluate(
+      "document.querySelector('.detail').scrollTop=document.querySelector('.detail').scrollHeight",
+    );
+    await call("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: layout.x,
+      y: layout.y,
+      deltaX: 0,
+      deltaY: 300,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await evaluate("scrollY!==0"))
+      throw Error("Response boundary scrolled page");
+    await evaluate(`(() => {
+      const pre = document.querySelector('.evidence-item pre');
+      pre.textContent = pre.dataset.original;
+      delete pre.dataset.original;
+      document.querySelector('.detail').scrollTop = 0;
+      document.getElementById('execution-log').open = true;
+    })()`);
+    if (await evaluate("document.documentElement.scrollHeight>innerHeight"))
+      throw Error("Execution log pushed workspace outside viewport");
+    await evaluate("document.getElementById('execution-log').open=false");
+    await evaluate(
+      "document.querySelector('.detail').scrollTop=document.querySelector('.detail').scrollHeight;document.querySelectorAll('.scenario')[1].click()",
+    );
+    if (await evaluate("document.querySelector('.detail').scrollTop!==0"))
+      throw Error("New scenario retained old response scroll position");
+    await evaluate("document.querySelector('.scenario').click()");
+  }
+  async function checkEnvironmentPanel() {
+    const height = await evaluate(
+      "document.getElementById('workspace').clientHeight",
+    );
+    await evaluate(
+      "document.getElementById('environment-open').focus();document.getElementById('environment-open').click()",
+    );
+    await wait("document.getElementById('environment-panel').open");
+    if (
+      !(await evaluate(
+        `document.getElementById('workspace').clientHeight===${height} && document.getElementById('environment-select').getBoundingClientRect().height>0 && document.getElementById('environment-name').textContent==='本地模擬'`,
+      ))
+    )
+      throw Error(
+        "Environment overlay changed workspace or summary is missing",
+      );
+    if (
+      await evaluate(
+        "document.documentElement.scrollWidth>innerWidth || document.getElementById('environment-panel').scrollWidth>document.getElementById('environment-panel').clientWidth",
+      )
+    )
+      throw Error("Environment panel overflow");
+    await call("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+    });
+    await call("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+    });
+    await wait("!document.getElementById('environment-panel').open");
+    if (!(await evaluate("document.activeElement.id==='environment-open'")))
+      throw Error("Environment panel did not restore header focus");
+  }
   await call("Runtime.enable");
   await call("Page.enable");
   await call("Browser.setDownloadBehavior", {
@@ -110,6 +242,14 @@ try {
   await wait(
     `document.querySelectorAll('.scenario').length===${scenarioCount}`,
   );
+  if (
+    !(await evaluate(
+      "document.querySelector('.scenario[aria-pressed=true]')!==null && !document.querySelector('.technical').open && !document.getElementById('execution-log').open && document.getElementById('environment-edit').hidden",
+    ))
+  )
+    throw Error("Initial selection or secondary controls incorrect");
+  await checkEnvironmentPanel();
+  await checkCatalogScrolling();
   await evaluate(
     "document.getElementById('scenario-search').value='callback';document.getElementById('scenario-search').dispatchEvent(new Event('input'))",
   );
@@ -131,6 +271,12 @@ try {
     catalog.filter((s) => s.category === "JWT").length
   )
     throw Error("Filter failed");
+  if (
+    !(await evaluate(
+      "document.querySelector('.scenario[aria-pressed=true]')!==null && document.getElementById('detail').textContent.includes(document.querySelector('.scenario[aria-pressed=true] strong').textContent)",
+    ))
+  )
+    throw Error("Filtered selection and detail disagree");
   await evaluate(
     "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
   );
@@ -153,7 +299,7 @@ try {
   )
     throw Error(JSON.stringify(stats));
   await evaluate(
-    "document.getElementById('export-json').click();document.getElementById('export-md').click()",
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click();document.querySelector('.export-menu').open=true;document.getElementById('export-md').click()",
   );
   for (let i = 0; i < 50; i++) {
     if (
@@ -194,6 +340,22 @@ try {
   if (await evaluate("document.querySelector('.evidence-item').open"))
     throw Error("Evidence did not collapse");
   await evaluate("document.querySelector('.evidence-item summary').click()");
+  await checkResponseScrolling();
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1280,
+    height: 720,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await checkEnvironmentPanel();
+  await checkCatalogScrolling();
+  await checkResponseScrolling();
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 1100,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
   await writeFile(
     join(work, "desktop.png"),
     Buffer.from(
@@ -209,6 +371,8 @@ try {
   });
   if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
     throw Error("Mobile overflow");
+  await checkEnvironmentPanel();
+  await checkCatalogScrolling();
   await writeFile(
     join(work, "mobile.png"),
     Buffer.from(
@@ -239,18 +403,27 @@ try {
   await wait(
     "document.getElementById('total').textContent==='1' && !document.getElementById('run').disabled",
   );
-  await evaluate("document.getElementById('environment-new').click()");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
   await evaluate(
     `document.getElementById('profile-name').value='My QA target';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('environment-form').requestSubmit()`,
   );
   await wait(
-    "!document.getElementById('environment-dialog').open && document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP')",
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
   );
   if ((await evaluate("document.getElementById('total').textContent")) !== "0")
     throw Error("Mixed environment results");
   const customId = await evaluate(
     "document.getElementById('environment-select').value",
   );
+  if (
+    !(await evaluate(
+      `document.getElementById('environment-name').textContent==='My QA target' && document.getElementById('environment-summary').textContent===${JSON.stringify(httpTarget.url)}`,
+    ))
+  )
+    throw Error("Header target summary not updated");
+  await evaluate("document.getElementById('environment-panel-done').click()");
   await evaluate(
     "document.querySelector('.scenario').click();document.querySelector('#detail button').click()",
   );
@@ -258,7 +431,7 @@ try {
     "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
   );
   await evaluate(
-    "document.getElementById('environment-select').value='local';document.getElementById('environment-select').dispatchEvent(new Event('change'))",
+    "document.getElementById('environment-open').click();document.getElementById('environment-select').value='local';document.getElementById('environment-select').dispatchEvent(new Event('change'))",
   );
   await wait(
     `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('environment-select').disabled`,
@@ -269,7 +442,7 @@ try {
     `document.getElementById('environment-select').value=${JSON.stringify(customId)};document.getElementById('environment-select').dispatchEvent(new Event('change'))`,
   );
   await wait(
-    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+    "document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP' && !document.getElementById('environment-select').disabled",
   );
   if ((await evaluate("document.getElementById('pass').textContent")) !== "1")
     throw Error("Custom result not retained");
@@ -283,7 +456,7 @@ try {
     throw Error("Stale configuration results retained");
   await call("Page.reload");
   await wait(
-    "document.getElementById('environment-mode').textContent.includes('CUSTOM_HTTP') && !document.getElementById('environment-select').disabled",
+    "document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP' && !document.getElementById('environment-select').disabled",
   );
   if (
     (await evaluate("document.getElementById('environment-select').value")) !==
@@ -296,7 +469,9 @@ try {
   await wait(
     "document.getElementById('pass').textContent==='1' && !document.getElementById('run').disabled",
   );
-  await evaluate("document.getElementById('export-json').click()");
+  await evaluate(
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+  );
   const customFile = join(downloads, `oauth-${customId}-report.json`);
   let customReport;
   for (let i = 0; i < 50; i++) {
@@ -314,7 +489,9 @@ try {
     customReport.results[0].target !== httpTarget.url
   )
     throw Error("Incorrect custom export target");
-  await evaluate("document.getElementById('environment-edit').click()");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-edit').click()",
+  );
   if (await evaluate("document.documentElement.scrollWidth > innerWidth"))
     throw Error("Mobile environment form overflow");
   await writeFile(
@@ -334,6 +511,272 @@ try {
     )) !== 1
   )
     throw Error("Profile not deleted");
+  await wait("document.getElementById('environment-panel').open");
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  const defenseTotal = await evaluate(
+    "document.getElementById('total').textContent",
+  );
+  await evaluate(
+    "document.getElementById('testing-mode').value='attack';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${attackCatalog.length} && !document.getElementById('run').disabled`,
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('total').textContent==='0' && document.getElementById('pass-label').textContent==='操作成功' && document.getElementById('run').hidden && !document.getElementById('attack-open')",
+    ))
+  )
+    throw Error("Attack mode still has global credential controls");
+  const chooseAttack = async (id) => {
+    const index = attackCatalog.findIndex((s) => s.id === id);
+    await evaluate(`document.querySelectorAll('.scenario')[${index}].click()`);
+  };
+  const setAttack = async (key, value) =>
+    evaluate(
+      `document.querySelector('[data-parameter="${key}"]').value=${JSON.stringify(value)};document.querySelector('[data-parameter="${key}"]').dispatchEvent(new Event('input',{bubbles:true}))`,
+    );
+  await setAttack("clientId", "demo-client");
+  await setAttack("clientSecret", "demo-secret");
+  await evaluate("document.getElementById('scenario-run').click()");
+  await wait(
+    "document.getElementById('total').textContent==='1' && document.getElementById('cancel').disabled",
+  );
+  await chooseAttack("secret-resource");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientSecret').value==='' && document.getElementById('attack-clientId').value===''",
+    ))
+  )
+    throw Error("Credentials leaked across scenario forms");
+  for (let index = 1; index < attackCatalog.length; index++) {
+    await chooseAttack(attackCatalog[index].id);
+    await evaluate("document.getElementById('scenario-run').click()");
+    await wait(
+      `document.getElementById('total').textContent==='${index + 1}' && document.getElementById('cancel').disabled`,
+    );
+  }
+  if (
+    !(await evaluate(
+      "document.getElementById('pass').textContent==='6' && document.getElementById('fail').textContent==='4' && document.getElementById('inconclusive').textContent==='0'",
+    ))
+  )
+    throw Error("Ten attack scenarios produced unexpected outcomes");
+  await chooseAttack("token-resource");
+  if (
+    !(await evaluate(
+      "!document.getElementById('attack-clientSecret') && document.getElementById('attack-accessToken') && document.getElementById('attack-resourcePath')",
+    ))
+  )
+    throw Error("Access-token case shows irrelevant secret parameters");
+  await chooseAttack("secret-token");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientSecret').value==='demo-secret'",
+    ))
+  )
+    throw Error("Scenario draft was not restored");
+  await evaluate(
+    "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+  );
+  let attackReport;
+  for (let i = 0; i < 50; i++) {
+    try {
+      attackReport = JSON.parse(
+        await readFile(
+          join(downloads, "oauth-simulation-attack-report.json"),
+          "utf8",
+        ),
+      );
+      break;
+    } catch {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  if (
+    attackReport?.testingMode !== "attack" ||
+    attackReport.results.length !== 10 ||
+    /demo-secret|demo-access-token|demo-issued-|demo-refresh-token|demo-code|demo-private-user/.test(
+      JSON.stringify(attackReport),
+    )
+  )
+    throw Error("Attack report leaked per-case credentials or user data");
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 1100,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await writeFile(
+    join(work, "attack-desktop.png"),
+    Buffer.from(
+      (await call("Page.captureScreenshot", { format: "png" })).data,
+      "base64",
+    ),
+  );
+  await setAttack("clientSecret", "incorrect-secret");
+  if ((await evaluate("document.getElementById('total').textContent")) !== "9")
+    throw Error(
+      "Changing one case cleared other results or retained stale result",
+    );
+  await evaluate("document.getElementById('scenario-run').click()");
+  await wait(
+    "document.getElementById('fail').textContent==='5' && document.getElementById('cancel').disabled",
+  );
+  // Environment supplies a target only; its client ID never prepopulates attack cases.
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
+  await evaluate(
+    `document.getElementById('profile-name').value='Case isolation target';document.getElementById('profile-protocol').value='legacy';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-client').value='environment-client-only';document.getElementById('environment-form').requestSubmit()`,
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-mode').dataset.mode==='CUSTOM_HTTP'",
+  );
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientId').value==='' && document.getElementById('attack-clientSecret').value==='' && document.getElementById('total').textContent==='0'",
+    ))
+  )
+    throw Error("Environment configuration leaked into per-scenario inputs");
+  await evaluate("document.getElementById('scenario-run').click()");
+  if (
+    !(await evaluate(
+      "!document.getElementById('attack-clientId').validity.valid && document.getElementById('total').textContent==='0'",
+    ))
+  )
+    throw Error("Missing per-scenario required inputs executed a test");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-edit').click();document.getElementById('environment-delete').click()",
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.getElementById('environment-select').value==='local'",
+  );
+  await evaluate("document.getElementById('environment-panel-done').click()");
+  await setAttack("clientSecret", "clear-on-mode-change");
+  await evaluate(
+    "document.getElementById('testing-mode').value='defense';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${scenarioCount} && !document.getElementById('run').disabled`,
+  );
+  if (
+    (await evaluate("document.getElementById('total').textContent")) !==
+    defenseTotal
+  )
+    throw Error("Defense results changed");
+  await evaluate(
+    "document.getElementById('testing-mode').value='attack';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    `document.querySelectorAll('.scenario').length===${attackCatalog.length} && !document.getElementById('testing-mode').disabled`,
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-clientSecret').value===''",
+    ))
+  )
+    throw Error("Mode change retained scenario secrets");
+  await evaluate(
+    "document.getElementById('environment-open').click();document.getElementById('environment-new').click()",
+  );
+  await evaluate(
+    `document.getElementById('profile-name').value='Modern OIDC';document.getElementById('profile-url').value=${JSON.stringify(httpTarget.url)};document.getElementById('profile-protocol').value='auth-service-oidc';document.getElementById('environment-form').requestSubmit()`,
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.querySelectorAll('.scenario').length===7",
+  );
+  if (
+    await evaluate(
+      "document.getElementById('catalog').textContent.includes('持有 client secret')",
+    )
+  )
+    throw Error("OIDC profile exposes unsupported client_credentials");
+  await evaluate(
+    "document.getElementById('environment-edit').click();document.getElementById('profile-protocol').value='array-session';document.getElementById('environment-form').requestSubmit()",
+  );
+  await wait(
+    "!document.getElementById('environment-dialog').open && document.getElementById('environment-panel').open && document.querySelectorAll('.scenario').length===3",
+  );
+  await evaluate(
+    "document.getElementById('environment-panel-done').click();document.querySelectorAll('.scenario')[2].click()",
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('attack-sessionCookie') && !document.getElementById('attack-accessToken') && !document.getElementById('attack-clientSecret')",
+    ))
+  )
+    throw Error("Array profile did not show session-only inputs");
+  await writeFile(
+    join(work, "array-session-profile.png"),
+    Buffer.from(
+      (await call("Page.captureScreenshot", { format: "png" })).data,
+      "base64",
+    ),
+  );
+  await evaluate(
+    "document.getElementById('testing-mode').value='integration';document.getElementById('testing-mode').dispatchEvent(new Event('change'))",
+  );
+  await wait(
+    "document.querySelectorAll('.scenario').length===2 && !document.getElementById('testing-mode').disabled",
+  );
+  if (
+    !(await evaluate(
+      "document.getElementById('environment-select').value==='local' && document.getElementById('environment-open').disabled && !document.getElementById('scenario-form') && !document.getElementById('integration-help').hidden",
+    ))
+  )
+    throw Error(
+      "Integration mode still requests attack credentials or uses HTTP target",
+    );
+  if (!(await evaluate("document.getElementById('run').disabled"))) {
+    await evaluate("document.getElementById('run').click()");
+    await wait(
+      "document.getElementById('total').textContent==='2' && document.getElementById('cancel').disabled",
+    );
+    if ((await evaluate("document.getElementById('pass').textContent")) !== "2")
+      throw Error("Integration A/B source browser flows failed");
+    await writeFile(
+      join(work, "integration.png"),
+      Buffer.from(
+        (await call("Page.captureScreenshot", { format: "png" })).data,
+        "base64",
+      ),
+    );
+    await evaluate(
+      "document.querySelector('.export-menu').open=true;document.getElementById('export-json').click()",
+    );
+    let integratedReport;
+    for (let i = 0; i < 50; i++) {
+      try {
+        integratedReport = JSON.parse(
+          await readFile(
+            join(downloads, "oauth-integration-report.json"),
+            "utf8",
+          ),
+        );
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    if (
+      integratedReport?.testingMode !== "integration" ||
+      integratedReport.environment !== "SOURCE_INTEGRATION" ||
+      integratedReport.results.length !== 2 ||
+      integratedReport.results.some(
+        (r) => r.status !== "PASS" || !r.sourceRevisions,
+      )
+    )
+      throw Error("Integration report lacks source verification");
+    const serialized = JSON.stringify(integratedReport);
+    if (
+      /me@gmail.com|stranger@gmail.com|g-1|g-2|client_secret\":|code_verifier\":|__Host-array_sso_session=|[?&](?:code|state)=/.test(
+        serialized,
+      )
+    )
+      throw Error("Integration report exposes credentials or personal data");
+  }
   if (errors.length) throw Error(JSON.stringify(errors));
   console.log(
     JSON.stringify({
@@ -349,13 +792,18 @@ try {
         "cancel",
         "reload clears state",
         "mobile overflow",
+        "desktop/mobile catalog wheel scroll and boundary containment",
+        "long response uses detail scroll without nested or page scrolling at desktop and laptop sizes",
         "no browser exceptions",
         "create/edit/delete environment",
+        "compact environment header, modal focus and Escape, mobile overlay and target summary",
         "custom HTTP execution",
         "environment result isolation",
         "revision invalidates old results",
         "persisted profile and selection",
         "custom report target identity",
+        "credential-free source integration mode and A/B browser flows when installed",
+        "attack mode capability outcomes, credential invalidation, redacted report and defense isolation",
       ],
       artifactDirectory: work,
     }),

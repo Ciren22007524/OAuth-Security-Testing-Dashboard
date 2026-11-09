@@ -4,11 +4,20 @@ let results = new Map();
 const resultGroups = new Map();
 let environments = [];
 let currentEnvironment;
+let testingMode = "defense";
+const scenarioInputs = new Map();
 let loadingEnvironment = false;
+let integrationAvailable = false;
 let editingEnvironment;
-const mode = () =>
+const environmentMode = () =>
   currentEnvironment?.type === "http" ? "CUSTOM_HTTP" : "SIMULATION";
 function environmentControls() {
+  $("testing-mode").disabled = running || loadingEnvironment;
+  $("run").hidden = testingMode === "attack";
+  $("environment-open").disabled =
+    !currentEnvironment || loadingEnvironment || testingMode === "integration";
+  $("environment-edit").hidden =
+    !currentEnvironment || currentEnvironment.builtin;
   $("environment-select").disabled = running || loadingEnvironment;
   $("environment-new").disabled = running || loadingEnvironment;
   $("environment-edit").disabled =
@@ -21,18 +30,18 @@ async function refreshEnvironments() {
   const response = await fetch("./api/environments");
   if (!response.ok) throw new Error("無法載入環境設定");
   environments = (await response.json()).environments;
-  $("environment-count").textContent = `${environments.length} 個環境`;
   const validGroups = new Set(
-    environments.map((profile) => `${profile.id}:${profile.revision}`),
+    environments.flatMap((profile) =>
+      ["defense", "attack", "integration"].map(
+        (mode) => `${profile.id}:${profile.revision}:${mode}`,
+      ),
+    ),
   );
   for (const key of resultGroups.keys())
     if (!validGroups.has(key)) resultGroups.delete(key);
   $("environment-select").replaceChildren(
     ...environments.map((profile) => {
-      const option = element(
-        "option",
-        `${profile.name} · ${profile.type === "http" ? "HTTP" : "模擬"}`,
-      );
+      const option = element("option", profile.name);
       option.value = profile.id;
       return option;
     }),
@@ -48,33 +57,79 @@ async function selectEnvironment(id) {
   environmentControls();
   try {
     const response = await fetch(
-      "./api/catalog?environmentId=" + encodeURIComponent(id),
+      "./api/catalog?environmentId=" +
+        encodeURIComponent(id) +
+        "&testingMode=" +
+        testingMode,
     );
     if (!response.ok) throw new Error("無法載入環境；請重新整理設定");
     const data = await response.json();
+    if (
+      currentEnvironment?.id !== data.profile.id ||
+      currentEnvironment?.revision !== data.profile.revision
+    ) {
+      clearAttackCredentials();
+    }
     currentEnvironment = data.profile;
     $("startup-help").hidden = true;
+    integrationAvailable = data.integration?.ready === true;
+    $("integration-help").hidden = testingMode !== "integration";
+    $("integration-help").textContent = data.integration?.message || "";
     catalog = data.catalog;
-    const key = `${currentEnvironment.id}:${currentEnvironment.revision}`;
+    const key = `${currentEnvironment.id}:${currentEnvironment.revision}:${testingMode}`;
     if (!resultGroups.has(key)) resultGroups.set(key, new Map());
     results = resultGroups.get(key);
-    selected = undefined;
+    selected = catalog[0]?.id;
+    displayedScenario = undefined;
+    $("scenario-search").value = "";
+    $("filter").replaceChildren(
+      element("option", "所有分類"),
+      ...[...new Set(catalog.map((s) => s.category))].map((category) =>
+        element("option", category),
+      ),
+    );
+    $("filter").firstElementChild.value = "all";
     $("environment-select").value = currentEnvironment.id;
-    $("environment-mode").textContent = "● " + mode();
+    $("environment-mode").textContent =
+      currentEnvironment.type === "http"
+        ? {
+            "auth-service-oidc": "auth-service OIDC",
+            "array-session": "Array session",
+          }[currentEnvironment.protocol] || "舊版 JSON／ES256"
+        : "隔離模擬";
+    $("environment-mode").dataset.mode = environmentMode();
     $("environment-mode").classList.toggle(
       "http",
       currentEnvironment.type === "http",
     );
+    $("environment-name").textContent = currentEnvironment.name;
+    $("environment-summary").textContent =
+      currentEnvironment.baseUrl || "隔離模擬 · 不連線外部服務";
+    $("environment-open").title =
+      `${currentEnvironment.name} · ${$("environment-summary").textContent}`;
     $("environment-target").textContent =
-      currentEnvironment.baseUrl || "隔離協定模擬器";
+      currentEnvironment.baseUrl || "程式內建模擬器";
     $("environment-notice").textContent =
-      currentEnvironment.type === "http"
-        ? `HTTP 目標：${currentEnvironment.baseUrl}。只執行無登入 session 的有界檢查，不跟隨重新導向；缺少設定會標為待確認。`
-        : "此處測量本機隔離 fixture。結果不代表任何 HTTP 目標或正式服務已通過。";
-    $("catalog-count").textContent = `/ ${catalog.length}`;
+      testingMode === "attack"
+        ? currentEnvironment.type === "http"
+          ? "攻擊參數由各情境獨立填寫；執行時才會使用指定憑證與此目標互動。"
+          : "各情境使用獨立模擬與自己的示範資料，不連線外部服務。"
+        : currentEnvironment.type === "http"
+          ? "只檢查公開端點與未登入請求；缺少必要設定的情境會標為待確認。"
+          : "執行內建隔離模擬，不會連線到你的服務。通過不代表正式服務安全。";
     $("console").textContent =
-      `[ready] ${currentEnvironment.name} · ${mode()}。結果依環境及設定版本分開保留。`;
-    $("status").textContent = `就緒 · ${currentEnvironment.name}`;
+      `[ready] ${currentEnvironment.name} · ${environmentMode()}。結果依環境及設定版本分開保留。`;
+    if (testingMode === "integration") {
+      $("environment-name").textContent = "隔離來源整合";
+      $("environment-summary").textContent =
+        "真實 auth-service＋Array，假 Google／獨立資料";
+    }
+    $("status").textContent =
+      testingMode === "integration"
+        ? "選使用者 A／B，參數會自動準備"
+        : `就緒 · ${currentEnvironment.name}`;
+    $("run").textContent =
+      testingMode === "integration" ? "執行 A／B 完整流程" : "執行全部情境";
     try {
       sessionStorage.setItem("oauth-environment-id", currentEnvironment.id);
     } catch {}
@@ -87,7 +142,9 @@ async function selectEnvironment(id) {
     throw error;
   } finally {
     loadingEnvironment = false;
-    $("run").disabled = !currentEnvironment;
+    $("run").disabled =
+      !currentEnvironment ||
+      (testingMode === "integration" && !integrationAvailable);
     environmentControls();
   }
 }
@@ -95,15 +152,22 @@ function profileFields() {
   const http = $("profile-type").value === "http";
   $("http-profile-fields").hidden = !http;
   $("profile-url").required = http;
+  $("defense-profile-fields").hidden =
+    testingMode === "attack" || $("profile-protocol").value !== "legacy";
   for (const input of $("http-profile-fields").querySelectorAll("input"))
     input.disabled = !http;
 }
 function openEnvironment(profile) {
+  $("defense-profile-fields").hidden = testingMode === "attack";
+  $("environment-panel").close();
   editingEnvironment = profile;
   $("environment-dialog-title").textContent = profile ? "管理環境" : "新增環境";
   $("profile-name").value = profile?.name || "";
   $("profile-type").value = profile?.type || "http";
   $("profile-url").value = profile?.baseUrl || "";
+  $("profile-protocol").value = profile
+    ? profile.protocol || "legacy"
+    : "auth-service-oidc";
   $("profile-client").value = profile?.clientId || "";
   $("profile-origin").value = profile?.origin || "";
   $("profile-redirect").value = profile?.redirectUri || "";
@@ -128,6 +192,7 @@ async function saveEnvironment(remove = false) {
           ...($("profile-type").value === "http"
             ? {
                 baseUrl: $("profile-url").value,
+                protocol: $("profile-protocol").value,
                 clientId: $("profile-client").value,
                 origin: $("profile-origin").value,
                 redirectUri: $("profile-redirect").value,
@@ -172,6 +237,7 @@ async function saveEnvironment(remove = false) {
   }
 }
 let selected;
+let displayedScenario;
 let controller;
 let running = false;
 function element(tag, text, className) {
@@ -200,25 +266,12 @@ function render() {
     const label = element("span", undefined, "case-label");
     label.append(
       element("strong", scenario.title),
-      element(
-        "small",
-        `${scenario.category.toUpperCase()}  /  ${scenario.severity.toUpperCase()}`,
-      ),
+      element("small", scenario.category),
     );
     const status = results.get(scenario.id)?.status || "未執行";
-    const icon =
-      { OAuth: "↗", Session: "⌁", JWT: "◇", Browser: "◎", Service: "⌘" }[
-        scenario.category
-      ] || "◈";
-    const symbol = element("span", icon, "case-symbol");
-    symbol.setAttribute("aria-hidden", "true");
-    const arrow = element("span", "›", "case-arrow");
-    arrow.setAttribute("aria-hidden", "true");
     button.append(
-      symbol,
       label,
-      element("span", status, `result ${status}`),
-      arrow,
+      element("span", statusLabel(status), `result ${status}`),
     );
     button.onclick = () => {
       selected = scenario.id;
@@ -238,43 +291,30 @@ function render() {
   $("visible-count").textContent = `${visible.length} 個情境`;
   const values = [...results.values()];
   $("total").textContent = values.length;
-  $("pass").textContent = values.filter((r) => r.status === "PASS").length;
-  $("fail").textContent = values.filter((r) =>
-    ["FAIL", "ERROR"].includes(r.status),
+  $("pass-label").textContent = testingMode === "attack" ? "操作成功" : "通過";
+  $("fail-label").textContent = testingMode === "attack" ? "被阻擋" : "未通過";
+  $("pass").className = testingMode === "attack" ? "SUCCEEDED" : "PASS";
+  $("fail").className = testingMode === "attack" ? "BLOCKED" : "FAIL";
+  $("pass").textContent = values.filter(
+    (r) => r.status === (testingMode === "attack" ? "SUCCEEDED" : "PASS"),
   ).length;
+  $("fail").textContent = values.filter(
+    (r) => r.status === (testingMode === "attack" ? "BLOCKED" : "FAIL"),
+  ).length;
+  $("error").textContent = values.filter((r) => r.status === "ERROR").length;
   $("inconclusive").textContent = values.filter(
     (r) => r.status === "INCONCLUSIVE",
   ).length;
-  $("coverage-progress").max = catalog.length || 1;
-  $("coverage-progress").value = values.length;
-  $("coverage-label").textContent =
-    `${values.length} / ${catalog.length} 已完成`;
-  $("runner-status").textContent = running ? "RUNNING" : "RUNNER READY";
-  $("runner-status").dataset.state = running ? "running" : "ready";
+  $("runner-status").hidden = true;
   $("export-json").disabled = $("export-md").disabled =
     running || !values.length;
+  return visible;
 }
 function detail() {
   const scenario = catalog.find((s) => s.id === selected);
   if (!scenario) {
     const empty = element("div", undefined, "empty");
-    const orbit = element("div", undefined, "empty-orbit");
-    orbit.setAttribute("aria-hidden", "true");
-    orbit.append(element("span", "◇", "empty-core"));
-    const steps = element("div", undefined, "empty-steps");
-    steps.append(
-      element("span", "選擇情境"),
-      element("b", "→"),
-      element("span", "驗證斷言"),
-      element("b", "→"),
-      element("span", "追溯證據"),
-    );
-    empty.append(
-      orbit,
-      element("h3", "每個結論，都從證據開始"),
-      element("p", "選擇左側情境，探索預期行為與實際回應。"),
-      steps,
-    );
+    empty.append(element("p", "選擇情境以查看預期行為與測試結果。"));
     $("detail").replaceChildren(empty);
     return;
   }
@@ -283,27 +323,70 @@ function detail() {
   wrap.append(
     element(
       "span",
-      `${result?.status || "未執行"} · ${result?.environment || mode()}`,
+      statusLabel(result?.status || "未執行"),
       `result-badge ${result?.status || ""}`,
     ),
     element("h3", scenario.title),
     element("p", scenario.expected),
   );
-  const run = element("button", "▶ 執行此情境", "primary");
-  run.disabled = running;
-  run.onclick = () => execute([scenario]);
+  const run = element("button", "執行此情境", "primary");
+  run.id = "scenario-run";
+  run.disabled =
+    running || (testingMode === "integration" && !integrationAvailable);
+  run.onclick = () => {
+    const form = $("scenario-form");
+    if (!form || form.reportValidity()) execute([scenario]);
+  };
+  if (testingMode === "attack") wrap.append(attackForm(scenario, wrap));
   const actions = element("div", undefined, "detail-run");
-  actions.append(element("small", scenario.id), run);
-  wrap.append(
-    actions,
-    element("h4", "前置條件 / REQUEST BUDGET"),
+  actions.append(run);
+  if (testingMode === "attack") {
+    const clear = element("button", "清除此情境參數");
+    clear.disabled = running;
+    clear.onclick = () => {
+      scenarioInputs.delete(scenario.id);
+      results.delete(scenario.id);
+      render();
+      detail();
+    };
+    actions.append(clear);
+  }
+  wrap.append(actions);
+  const technical = element("details", undefined, "technical");
+  technical.append(
+    element("summary", "測試前提與技術資訊"),
     element(
       "p",
-      `${scenario.prerequisites.join("、")} · 最多 ${scenario.requestBudget} 個請求`,
-      "request-budget",
+      `${scenario.id} · ${scenario.prerequisites.join("、")} · 最多 ${scenario.requestBudget} 個請求`,
     ),
   );
+  if (result)
+    technical.append(
+      element(
+        "p",
+        `${result.durationMs} ms · cleanup: ${result.cleanup} · revision ${result.revision}`,
+        "run-metadata",
+      ),
+    );
+  wrap.append(technical);
+  if (testingMode === "attack")
+    wrap.append(
+      element(
+        "p",
+        "以攻擊者能力判讀：操作成功不等於漏洞；被阻擋也不代表所有路徑安全。",
+        "muted",
+      ),
+    );
+  const resultSection = element("section");
+  resultSection.id = "scenario-results";
+  const output = resultSection;
   if (result) {
+    if (result.observations?.length) {
+      const observations = element("ul");
+      for (const observation of result.observations)
+        observations.append(element("li", observation));
+      output.append(element("h4", "觀察到的能力與限制"), observations);
+    }
     if (result.assertions.length) {
       const list = element("ul", undefined, "assertion-list");
       for (const assertion of result.assertions)
@@ -314,25 +397,23 @@ function detail() {
             assertion.passed ? "PASS" : "FAIL",
           ),
         );
-      wrap.append(
+      output.append(
         element(
           "h4",
-          `斷言驗證 / ${result.assertions.filter((a) => a.passed).length} OF ${result.assertions.length}`,
+          `斷言驗證（${result.assertions.filter((a) => a.passed).length} / ${result.assertions.length}）`,
         ),
         list,
       );
     }
-    if (result.limitation || result.error)
-      wrap.append(
-        element("p", result.limitation || result.error, "result-note"),
-      );
+    for (const note of [result.error, result.limitation].filter(Boolean))
+      output.append(element("p", note, "result-note"));
     if (result.recommendations?.length) {
       const recommendations = element("ul");
       for (const recommendation of result.recommendations)
         recommendations.append(element("li", recommendation));
-      wrap.append(element("h4", "改善建議 / RECOMMENDATIONS"), recommendations);
+      output.append(element("h4", "改善建議"), recommendations);
     }
-    wrap.append(element("h4", `HTTP 證據 / ${result.evidence.length} RECORDS`));
+    output.append(element("h4", `HTTP 證據（${result.evidence.length}）`));
     for (const [index, record] of result.evidence.entries()) {
       const item = element("details", undefined, "evidence-item");
       item.open = index === 0;
@@ -343,19 +424,19 @@ function detail() {
         element("span", record.request.path || record.request.url),
       );
       item.append(summary, element("pre", JSON.stringify(record, null, 2)));
-      wrap.append(item);
+      output.append(item);
     }
     if (!result.evidence.length)
-      wrap.append(element("p", "此情境沒有 HTTP 請求，請參閱斷言與測試限制。"));
-    wrap.append(
-      element(
-        "p",
-        `${result.durationMs} ms  ·  cleanup: ${result.cleanup}  ·  revision ${result.revision}`,
-        "result-footnote",
-      ),
-    );
+      output.append(
+        element("p", "此情境沒有 HTTP 請求，請參閱斷言與測試限制。"),
+      );
   }
+  wrap.append(resultSection);
   $("detail").replaceChildren(wrap);
+  if (displayedScenario !== selected) {
+    $("detail").parentElement.scrollTop = 0;
+    displayedScenario = selected;
+  }
 }
 function log(text) {
   $("console").textContent += `\n[${new Date().toLocaleTimeString()}] ${text}`;
@@ -386,14 +467,25 @@ async function execute(scenarios) {
           id: scenario.id,
           environmentId: currentEnvironment.id,
           environmentRevision: currentEnvironment.revision,
+          testingMode,
+          ...(testingMode === "attack"
+            ? { attack: attackInput(scenario.id) }
+            : {}),
         }),
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`執行器 HTTP ${response.status}`);
+      if (!response.ok) {
+        const problem = await response.json().catch(() => ({}));
+        throw new Error(
+          problem.error === "invalid_attack_input"
+            ? "此情境參數格式不符；端點須為 / 開頭的路徑，且不能混入其他情境的欄位。"
+            : `執行器 HTTP ${response.status}`,
+        );
+      }
       const result = await response.json();
       results.set(scenario.id, result);
       log(
-        `[${currentEnvironment.name}] ${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
+        `[${testingMode === "integration" ? "來源整合" : currentEnvironment.name}] ${result.status.padEnd(12)} ${scenario.title} · ${result.durationMs} ms`,
       );
       render();
       detail();
@@ -406,8 +498,21 @@ async function execute(scenarios) {
     }
     $("status").textContent = rateLimited
       ? "目標回報限流，已停止剩餘情境；請等待 Retry-After 再執行。"
-      : `執行完成 · ${currentEnvironment.name} · ${mode()}`;
+      : testingMode === "integration"
+        ? "來源整合完成 · 隔離 auth-service＋Array"
+        : `執行完成 · ${currentEnvironment.name}`;
   } catch (error) {
+    if (controller.signal.aborted && testingMode === "integration") {
+      $("status").textContent = "正在停止並清理隔離瀏覽器與服務…";
+      $("cancel").disabled = true;
+      for (let attempt = 0; attempt < 160; attempt++) {
+        try {
+          const health = await (await fetch("./api/health")).json();
+          if (!health.busy) break;
+        } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
     const message = controller.signal.aborted
       ? "已停止；已完成的結果保留，未執行項目不計入。"
       : error.message;
@@ -426,25 +531,50 @@ function exportReport(format) {
   const report = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    environment: mode(),
+    environment:
+      testingMode === "integration" ? "SOURCE_INTEGRATION" : environmentMode(),
+    testingMode,
     environmentId: currentEnvironment.id,
-    environmentName: currentEnvironment.name,
-    configuration: currentEnvironment,
+    environmentName:
+      testingMode === "integration" ? "隔離來源整合" : currentEnvironment.name,
+    configuration:
+      testingMode === "integration"
+        ? { type: "source-integration" }
+        : testingMode === "attack"
+          ? {
+              id: currentEnvironment.id,
+              name: currentEnvironment.name,
+              type: currentEnvironment.type,
+              revision: currentEnvironment.revision,
+              ...(currentEnvironment.baseUrl
+                ? { baseUrl: currentEnvironment.baseUrl }
+                : {}),
+            }
+          : currentEnvironment,
     limitations: [
-      currentEnvironment.type === "http"
-        ? "僅測試所選 HTTP 目標的公開及無 session 端點；未驗證真實登入、輪替、撤銷或瀏覽器 CORS。"
-        : "僅驗證隔離模擬器；不代表 HTTP 目標、Google 登入、D1 或瀏覽器 CORS 通過。",
+      ...(testingMode === "attack"
+        ? [
+            "依各攻擊情境的獨立參數執行；只代表記錄的能力與對照結果，非完整 OIDC 驗收。",
+          ]
+        : []),
+      testingMode === "attack"
+        ? "憑證與取得的 token 不保存、不匯出；已簽發的 token 未自動撤銷，效期由目標管理。"
+        : testingMode === "integration"
+          ? "此模式未使用選定 HTTP 目標；來源版本與逐步驗證請見各情境結果。"
+          : currentEnvironment.type === "http"
+            ? "僅測試所選 HTTP 目標的公開及無 session 端點；未驗證真實登入、輪替、撤銷或瀏覽器 CORS。"
+            : "僅驗證隔離模擬器；不代表 HTTP 目標、Google 登入、D1 或瀏覽器 CORS 通過。",
     ],
     results: [...results.values()],
   };
   const text =
     format === "json"
       ? JSON.stringify(report, null, 2)
-      : `# OAuth 安全測試報告\n\n${report.environmentName} · ${report.environment} · ${report.generatedAt}\n\n目標：${currentEnvironment.baseUrl || "isolated fixture"}\n\n${report.limitations.join("\n")}\n\n` +
+      : `# OAuth 安全測試報告\n\n${report.environmentName} · ${report.environment} · ${report.testingMode} · ${report.generatedAt}\n\n目標：${currentEnvironment.baseUrl || "isolated fixture"}\n\n${report.limitations.join("\n")}\n\n` +
         report.results
           .map(
             (r) =>
-              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
+              `## ${r.title} — ${r.status}\n\n${r.expected}\n\n${r.sourceRevisions ? `來源版本：auth-service ${r.sourceRevisions.auth} / Array ${r.sourceRevisions.array}\n\n` : ""}${r.assertions.map((a) => `- ${a.passed ? "PASS" : "FAIL"}: ${a.name}`).join("\n")}\n\n${(r.observations || []).join("\n")}\n\n${r.limitation || ""}\n\n${(r.recommendations || []).map((item) => `- 建議：${item}`).join("\n")}\n\n\`\`\`json\n${JSON.stringify(r.evidence, null, 2)}\n\`\`\`\n`,
           )
           .join("\n");
   const url = URL.createObjectURL(
@@ -454,22 +584,150 @@ function exportReport(format) {
   );
   const link = element("a");
   link.href = url;
-  link.download = `oauth-${currentEnvironment.type === "simulation" ? "simulation" : currentEnvironment.id}-report.${format === "json" ? "json" : "md"}`;
+  link.download =
+    testingMode === "integration"
+      ? `oauth-integration-report.${format === "json" ? "json" : "md"}`
+      : `oauth-${currentEnvironment.type === "simulation" ? "simulation" : currentEnvironment.id}${testingMode === "attack" ? "-attack" : ""}-report.${format === "json" ? "json" : "md"}`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$("filter").onchange = render;
-$("scenario-search").oninput = render;
+function statusLabel(status) {
+  return { SUCCEEDED: "操作成功", BLOCKED: "被阻擋" }[status] || status;
+}
+function attackInput(id) {
+  return { ...(scenarioInputs.get(id) || {}) };
+}
+function clearAttackResults() {
+  for (const [key, group] of resultGroups)
+    if (key.endsWith(":attack")) group.clear();
+}
+function clearAttackCredentials() {
+  scenarioInputs.clear();
+  clearAttackResults();
+}
+function attackForm(scenario, wrap) {
+  const form = element("form", undefined, "scenario-form");
+  form.id = "scenario-form";
+  form.autocomplete = "off";
+  form.append(
+    element("h4", "此情境參數"),
+    element(
+      "p",
+      currentEnvironment.type === "simulation"
+        ? "本地模擬可留白使用此情境的示範資料；填入的值只用於這個情境。"
+        : "只對目前環境送出此情境的參數；不沿用其他情境或環境內的憑證。",
+      "muted",
+    ),
+  );
+  const values = scenarioInputs.get(scenario.id) || {};
+  const advanced = element("details", undefined, "scenario-advanced");
+  advanced.append(element("summary", "端點與認證方式（選填）"));
+  const advancedFields = element("div", undefined, "advanced-fields");
+  advanced.append(advancedFields);
+  for (const field of scenario.fields) {
+    const label = element("label", field.label + (field.required ? " *" : ""));
+    const input = element(field.type === "select" ? "select" : "input");
+    input.id = `attack-${field.key}`;
+    input.dataset.parameter = field.key;
+    if (field.type === "select") {
+      for (const option of field.options) {
+        const node = element("option", option.label);
+        node.value = option.value;
+        input.append(node);
+      }
+    } else {
+      input.type = field.type || "text";
+      input.maxLength = field.maxLength;
+      input.placeholder = field.placeholder || "";
+      input.autocomplete = field.type === "password" ? "new-password" : "off";
+      input.spellcheck = false;
+    }
+    input.value =
+      values[field.key] ||
+      (field.type === "select" ? field.options[0].value : "");
+    input.required = field.required && currentEnvironment.type === "http";
+    input.disabled = running;
+    input.addEventListener("input", () => {
+      const draft = scenarioInputs.get(scenario.id) || {};
+      draft[field.key] = input.value;
+      scenarioInputs.set(scenario.id, draft);
+      results.delete(scenario.id);
+      $("scenario-results")?.remove();
+      wrap.querySelector(".run-metadata")?.remove();
+      const badge = wrap.querySelector(".result-badge");
+      badge.textContent = "未執行";
+      badge.className = "result-badge";
+      render();
+    });
+    label.append(input);
+    if (["tokenPath", "authMethod", "userinfoPath"].includes(field.key)) {
+      advancedFields.append(label);
+      if (values[field.key] && values[field.key] !== "auto")
+        advanced.open = true;
+    } else form.append(label);
+  }
+  if (advancedFields.childElementCount) form.append(advanced);
+  if (scenario.impact)
+    form.append(element("p", scenario.impact, "result-note"));
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    $("scenario-run").click();
+  };
+  return form;
+}
+$("testing-mode").onchange = async () => {
+  const previous = testingMode;
+  testingMode = $("testing-mode").value;
+  if (testingMode !== "attack") clearAttackCredentials();
+  try {
+    await selectEnvironment(
+      testingMode === "integration" ? "local" : currentEnvironment.id,
+    );
+  } catch {
+    testingMode = previous;
+    $("testing-mode").value = previous;
+  }
+};
+function filterScenarios() {
+  const visible = render();
+  if (!visible.some((s) => s.id === selected)) selected = visible[0]?.id;
+  render();
+  detail();
+}
+$("filter").onchange = filterScenarios;
+$("scenario-search").oninput = filterScenarios;
 $("run").onclick = () => execute(catalog);
 $("cancel").onclick = () => controller?.abort();
-$("export-json").onclick = () => exportReport("json");
-$("export-md").onclick = () => exportReport("md");
+for (const [id, format] of [
+  ["export-json", "json"],
+  ["export-md", "md"],
+]) {
+  $(id).onclick = () => {
+    exportReport(format);
+    document.querySelector(".export-menu").open = false;
+  };
+}
+document.addEventListener("click", (event) => {
+  const menu = document.querySelector(".export-menu");
+  if (!menu.contains(event.target)) menu.open = false;
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape")
+    document.querySelector(".export-menu").open = false;
+});
 $("environment-select").onchange = () =>
   selectEnvironment($("environment-select").value).catch(() => {});
+$("environment-open").onclick = () => $("environment-panel").showModal();
+$("environment-panel-close").onclick = $("environment-panel-done").onclick =
+  () => $("environment-panel").close();
+$("environment-dialog").addEventListener("close", () =>
+  $("environment-panel").showModal(),
+);
 $("environment-new").onclick = () => openEnvironment();
 $("environment-edit").onclick = () => openEnvironment(currentEnvironment);
 $("environment-close").onclick = () => $("environment-dialog").close();
 $("profile-type").onchange = profileFields;
+$("profile-protocol").onchange = profileFields;
 $("environment-form").onsubmit = (event) => {
   event.preventDefault();
   saveEnvironment();
