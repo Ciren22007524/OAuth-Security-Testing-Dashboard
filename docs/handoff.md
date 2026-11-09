@@ -1,6 +1,6 @@
 # 交接：OAuth Dashboard 完整現況與待辦
 
-> 產生日期：2026-11-04（Asia/Taipei）｜程式基準：`feature-windows-portable-release` @ `aa9643d4873909f62844429d4b7947f2463688d3`（已納入 origin/main `3b9b99b`）｜交接給：下一位開發 agent（未指定工具）
+> 產生日期：2026-11-04（Asia/Taipei）｜程式基準：`feature-windows-portable-release` @ `f474cbd624440e90559058cfc74a400efe2fcd7d`（已納入 origin/main `31daf91`）｜交接給：下一位開發 agent（未指定工具）
 >
 > Codex：`$handoff resume docs/handoff.md`；Claude Code：`/handoff resume docs/handoff.md`。
 >
@@ -61,7 +61,7 @@
 
 `git ls-remote --heads origin` 查到 main 及 5 條 feature 分支：`feature-oauth-security-lab`、`feature-complete-simulation-suite`、`feature-environment-manager`、`feature-dashboard-polish`、`feature-fix-resource-loading`。main 歷史包含相應 merge commits；保留分支不代表尚未合併，也不能推斷仍有人負責。接手時重查，不自行刪除。
 
-本輪中途 fetch 發現 main 已合併 PR #1（`3b9b99b`，另一位 agent 的 Node 24 JWKS 相容性修正），已 merge 進程式基準，保留其變更與 `.nvmrc`（24.5.0）。open PR 仍無法確認。
+本輪中途 fetch 發現 main 已合併 PR #1（`31daf91`，另一位 agent 的 Node 24 JWKS 相容性修正），已 merge 進程式基準，保留其變更與 `.nvmrc`（24.5.0）。open PR 仍無法確認。
 
 上述分支清單為本輪初始觀測；其後新增本輪 Windows feature 分支，接手應再查最新遠端 heads。
 
@@ -85,7 +85,7 @@
 
 | 指令／檢查                                                                           | 本輪結果                                                                                                                                |
 | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `git fetch origin`、HEAD 與 origin/main                                              | 初始均為 702dad4；中途納入 main 的 3b9b99b，再驗證可攜式程式基準                                                                        |
+| `git fetch origin`、HEAD 與 origin/main                                              | 初始均為 ddad370；中途納入 main 的 31daf91，再驗證可攜式程式基準                                                                        |
 | `git status -s`（開始時）                                                            | 乾淨                                                                                                                                    |
 | `git log --oneline -15 origin/main`、`git branch -r`、`git ls-remote --heads origin` | 已執行；分支限制見上文                                                                                                                  |
 | `gh pr list --state open`（指定本 repo）                                             | Forbidden；PR 與遠端 CI 未確認                                                                                                          |
@@ -172,4 +172,4 @@
 
 ## 後續分支整理紀錄（2026-11-04）
 
-使用者要求處理全部舊分支及唯一未結 PR。PR #2（head `334bdb27ed726bc3e999428f8ecaa415825caa16`）是舊版 CI 專項交接，已與 main 的完整交接發生 add/add 衝突；本輪保留本文件，將該 PR 的有效 CI 待辦整合到 `docs/STATUS.md`。這不表示已將 CI 改成 node-version-file，也不把該 PR 對舊環境的版本／GitHub API 描述當成本輪事實。所有 commit 歷史保留，清理只刪已整合的分支參照，不刪版本 tag。
+使用者要求處理全部舊分支及唯一未結 PR。PR #2（head `136ad8561c807d149b3953e52d71c1ce755daebf`）是舊版 CI 專項交接，已與 main 的完整交接發生 add/add 衝突；本輪保留本文件，將該 PR 的有效 CI 待辦整合到 `docs/STATUS.md`。這不表示已將 CI 改成 node-version-file，也不把該 PR 對舊環境的版本／GitHub API 描述當成本輪事實。所有 commit 歷史保留，清理只刪已整合的分支參照，不刪版本 tag。
