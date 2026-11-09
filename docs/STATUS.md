@@ -1,6 +1,14 @@
 # 開發狀態
 
-更新：2026-11-04
+更新：2026-11-09
+
+## 目前狀態（2026-11-09）
+
+- `main` @ `e95b0a6`：已合併 PR #3（文件改用身份改寫後的新 commit 編號）與 PR #4（介面精簡、OIDC 攻擊模式、Array SSO／auth-service 整合）。遠端只剩 `main` 一條分支，沒有開著的 PR。
+- 在 `e95b0a6` 上以 Node v24.22.1 重跑：`npm ci` 通過、`npm run check` 通過（43 個 JS 模組，只檢查語法）、`npm test` 86/86 通過。本輪沒有重跑瀏覽器、資源載入與 `test:integration`／`test:*-source`／`test:auth-*`。
+- Windows 預覽：Release workflow run #1 在 Windows runner 完成檢查、建置與 EXE smoke test，結果 success；`v0.2.0-preview.1` 已發布為 GitHub 預發行版。仍沒有使用者在 Windows 實機雙擊執行的紀錄。
+- GitHub API 已可使用：本輪實際查得 PR、Actions 與 Release 狀態，取代下方較早「回 Forbidden、未確認」的紀錄。
+- 舊的完整專案交接文件 `docs/handoff.md` 已在 PR #4 合併後過時，本輪刪除；需要再交接時重新產生。
 
 ## 已交付免填參數的第一條整合流程（2026-11-06）
 
@@ -98,7 +106,7 @@
 
 ## 待辦優先序
 
-目前 P0 先確認 Windows CI／預覽 Release 與使用者雙擊操作結果；下表的雲端部署是後續選項，不再阻擋先看介面。
+Windows CI 與預覽 Release 已確認成功（見上方「目前狀態」），只剩使用者雙擊操作結果待確認；下表的雲端部署是後續選項，不再阻擋先看介面。
 
 | 優先序 | 工作                       | 前提與完成判準                                                                                                      |
 | ------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -145,7 +153,7 @@
 
 若要測試真實登入、正式 Google／D1 或帶 session 的撤銷，需要先決定隔離測試身份與 session 注入方式。這不阻擋目前的環境管理與無 session 檢查；不會自動變更正式 CLIENTS。機密不能貼到對話或寫入設定／報告。
 
-本輪 GitHub API 查詢仍回 Forbidden，無法以 API 確認目前 PR／CI 狀態；Git HTTPS 讀寫可用。PR #2 作者曾記錄 PR #1 的 CI 通過，屬其歷史驗證紀錄，本輪未重新查得遠端結果。
+（2026-11-04 紀錄）當時 GitHub API 查詢回 Forbidden，無法確認 PR／CI 狀態。2026-11-09 起 API 已可使用，PR #1 合併 commit 的 CI 經實際查詢為 success。
 
 ## PR #2 與分支整理（2026-11-04）
 
@@ -162,6 +170,8 @@
 
 ## 下一步
 
+- 使用者在本機把 tag `v0.2.0-preview.1` 重推到改寫後的 `6efd8a9`（這是 gmail 唯一還留在 repo 中的地方）。
+- 使用者在 Windows 實機雙擊 EXE，確認自動開啟介面與設定保存。
 - 檢視一般 CI 是否改由 `.nvmrc` 讀 Node 版本：目前 CI 為 `24`、`.nvmrc` 為 `24.5.0`；Windows Release 固定 `24.19.0`。統一前需確認 SEA 建置與版本相容性，本輪未把這項工作標為完成。
 - 帶 session 的遠端輪替／撤銷測試：需先決定隔離測試身份與 session 注入方式。
 - TypeScript 型別檢查或 lint 是否需要另行決定，並非本輪分支清理的修改範圍。
