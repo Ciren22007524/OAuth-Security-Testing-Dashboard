@@ -1,6 +1,15 @@
 # 開發狀態
 
-更新：2026-11-09
+更新：2026-11-10
+
+## 雲端環境與 PR 交接（2026-11-10）
+
+- 最新遠端 `main` 為 `444be2f`，介面與來源整合功能已由 PR #4 合併；舊本機 `feature-simplify-test-workspace` 是身份改寫前的歷史，不再作新功能基準。不要重複送出或 reset 掉它。
+- 待送文件分支 `handoff-array-negative-scenarios` @ `ea9be44` 比 main 多 2 個提交，只修改 STATUS 與 handoff，未實作 Array 負向情境。Git HTTPS fetch／分支查詢成功；GitHub REST／GraphQL API 均回 Forbidden，PR 建立未成功，open PR 與最新 CI 未確認。
+- 環境設定草稿已確認保存：自訂網域 `api.github.com` 與更新的啟動指引。執行中政策仍不含該網域；需要使用者在環境設定儲存並發布後，以新 session 驗證。放行網域不等於 API 已取得授權，不先要求使用者提供 token。
+- 在最新 main 基準以 Node v24.19.0 重跑：43 個模組語法檢查與 86/86 自動測試通過。先前本輪舊分支的 integration／browser 也通過，且比較 src／public／scripts／test 與 main 無差異；本次切換 main 後未再重跑這兩套，不混稱 main 新測試。
+- 下一步先恢復 GitHub API 並送出既有文件分支的 PR；交接見 `docs/handoff.md`。Array 負向情境實作規格仍保存於遠端 `handoff-array-negative-scenarios:docs/handoff.md`，送 PR 不代表已完成實作。
+- 下方「目前狀態（2026-11-09）」保留為歷史紀錄；其中只有 main、沒有 PR、API 可用等描述不是本次環境的現況。
 
 ## 目前狀態（2026-11-09）
 
