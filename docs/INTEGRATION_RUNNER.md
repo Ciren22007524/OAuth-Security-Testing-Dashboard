@@ -14,6 +14,8 @@ npm start
 
 設定指令在 ignored `.local/integration-sources/` 取得固定、已測試的來源及鎖定依賴：
 
+設定時會明確 fetch 指定 commit，再切換至該版本。若先前在 clone 後出現 `unable to read tree`，更新主專案後重跑 `npm run setup:integration` 即可接續只有 `.git`、尚未 checkout 的快取；已有檔案或版本變更的快取仍不會被覆寫。
+
 - auth-service `337b1cec1b91cd0cf973ca5bc9ed520ee5e550ae`
 - array-line-demo `fc79f38e064f57da7cdb37964f6366e376cf01ac`
 

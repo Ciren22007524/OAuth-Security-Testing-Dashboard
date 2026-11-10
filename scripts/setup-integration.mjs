@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 const root = fileURLToPath(
@@ -42,6 +42,21 @@ try {
         ],
         root,
       );
+    }
+    // A failed --no-checkout clone leaves only .git. Recover that state without
+    // touching an existing checkout or any user-created files.
+    const entries = await readdir(path);
+    const index = spawnSync("git", ["ls-files", "--stage"], {
+      cwd: path,
+      encoding: "utf8",
+    });
+    const unpopulated =
+      entries.length === 1 &&
+      entries[0] === ".git" &&
+      index.status === 0 &&
+      !index.stdout.trim();
+    if (!exists || unpopulated) {
+      run("git", ["fetch", "origin", spec.revision], path);
       run("git", ["checkout", "--detach", spec.revision], path);
     } else {
       const revision = spawnSync("git", ["rev-parse", "HEAD"], {
